@@ -63,6 +63,4 @@ test-amd64-darwin: $(TARGET_AMD64_DARWIN)
 	@echo "Testing AMD64 Darwin version (via Rosetta)..."
 	arch -x86_64 ./$(TARGET_AMD64_DARWIN) examples/hello.bf
 
-
-
 .PHONY: all clean test test-amd64-darwin amd64-darwin

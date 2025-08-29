@@ -5,16 +5,6 @@
 #include <unistd.h>
 #include <sys/mman.h>
 
-#if defined(__linux__)
-#ifndef MAP_ANONYMOUS
-#define MAP_ANONYMOUS 0x20
-#endif
-#elif defined(__APPLE__)
-#ifndef MAP_ANONYMOUS
-#define MAP_ANONYMOUS MAP_ANON
-#endif
-#endif
-
 #include "dasm_proto.h"
 
 #define BF_MEMORY_SIZE 30000
@@ -43,20 +33,20 @@ static char *read_file(const char *filename, size_t *size) {
     if (!file) {
         bf_error("Could not open file");
     }
-    
+
     fseek(file, 0, SEEK_END);
     *size = ftell(file);
     fseek(file, 0, SEEK_SET);
-    
+
     char *content = malloc(*size + 1);
     if (!content) {
         bf_error("Memory allocation failed");
     }
-    
+
     fread(content, 1, *size, file);
     content[*size] = '\0';
     fclose(file);
-    
+
     return content;
 }
 
@@ -77,17 +67,17 @@ static bf_func compile_bf(const char *program, int debug_mode) {
     dasm_State **Dst = &state;
     dasm_init(Dst, 1);
     dasm_setup(Dst, actions);
-    
+
     // Allocate enough PC labels for nested loops
     dasm_growpc(Dst, MAX_NESTING * 2);
-    
+
     int loop_stack[MAX_NESTING];
     int loop_sp = 0;
     int next_label = 0;
-    
+
     // Architecture-specific prologue
     compile_bf_prologue(Dst);
-    
+
     for (const char *pc = program; *pc; pc++) {
         switch (*pc) {
             case '>':
@@ -121,65 +111,65 @@ static bf_func compile_bf(const char *program, int debug_mode) {
                 break;
         }
     }
-    
+
     if (loop_sp != 0) {
         bf_error("Unmatched '['");
     }
-    
+
     // Architecture-specific epilogue
     compile_bf_epilogue(Dst);
-    
+
     void *code = NULL;
     size_t size;
     dasm_link(Dst, &size);
-    
+
     code = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
     if (code == MAP_FAILED) {
         bf_error("mmap failed");
     }
-    
+
     dasm_encode(Dst, code);
     dasm_free(Dst);
-    
+
     if (debug_mode) {
         dump_code_hex(code, size);
     }
-    
+
     if (mprotect(code, size, PROT_READ | PROT_EXEC) != 0) {
         bf_error("mprotect failed");
     }
-    
+
     return (bf_func)code;
 }
 
 int main(int argc, char *argv[]) {
     int debug_mode = 0;
     int arg_offset = 1;
-    
+
     if (argc >= 2 && strcmp(argv[1], "-d") == 0) {
         debug_mode = 1;
         arg_offset = 2;
     }
-    
+
     if (argc < arg_offset + 1) {
         fprintf(stderr, "Usage: %s [-d] <brainfuck_file>\n", argv[0]);
         fprintf(stderr, "  -d: Enable debug mode (dump compiled code)\n");
         return 1;
     }
-    
+
     size_t program_size;
     char *program = read_file(argv[arg_offset], &program_size);
-    
+
     char *memory = calloc(BF_MEMORY_SIZE, 1);
     if (!memory) {
         bf_error("Memory allocation failed");
     }
-    
+
     bf_func compiled_program = compile_bf(program, debug_mode);
     compiled_program(memory);
-    
+
     free(program);
     free(memory);
-    
+
     return 0;
 }
