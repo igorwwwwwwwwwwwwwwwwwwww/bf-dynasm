@@ -103,6 +103,14 @@ static bf_func compile_bf(const char *program, int debug_mode) {
                 compile_bf_arch(Dst, *pc);
                 break;
             case '[':
+                // Check for clear loop optimization [-]
+                if (pc[1] == '-' && pc[2] == ']') {
+                    // Clear loop detected: [-] -> mov byte [ptr], #0
+                    compile_bf_clear_cell(Dst);
+                    pc += 2; // Skip the '-]'
+                    break;
+                }
+                
                 if (loop_sp >= MAX_NESTING) {
                     bf_error("Too many nested loops");
                 }

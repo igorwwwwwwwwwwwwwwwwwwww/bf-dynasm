@@ -87,6 +87,12 @@ static void compile_bf_arch_optimized(dasm_State **Dst, char instruction, int co
     }
 }
 
+// AMD64-specific clear cell optimization for [-] pattern  
+static void compile_bf_clear_cell(dasm_State **Dst) {
+    |  mov rax, [rsp+8]      // Load memory pointer
+    |  mov byte [rax], 0     // Clear the cell
+}
+
 static void compile_bf_prologue(dasm_State **Dst) {
     |  push rbp
     |  mov rbp, rsp
