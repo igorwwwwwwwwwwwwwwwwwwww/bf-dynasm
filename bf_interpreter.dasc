@@ -1,0 +1,294 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <unistd.h>
+#include <sys/mman.h>
+
+#if defined(__linux__)
+#ifndef MAP_ANONYMOUS
+#define MAP_ANONYMOUS 0x20
+#endif
+#elif defined(__APPLE__)
+#ifndef MAP_ANONYMOUS
+#define MAP_ANONYMOUS MAP_ANON
+#endif
+#endif
+
+#include "dasm_proto.h"
+
+#ifdef X64_BUILD
+#include "dasm_x86.h"
+#define ARCH_STRING "x64"
+#else
+#include "dasm_arm64.h"
+#define ARCH_STRING "arm64"
+#endif
+
+#define BF_MEMORY_SIZE 30000
+#define MAX_NESTING 1000
+
+|.if X64_BUILD
+|.arch x64
+|.else
+|.arch arm64
+|.endif
+|.actionlist actions
+
+typedef int (*bf_func)(char *memory);
+
+// C wrapper functions for JIT to call
+static int putchar_wrapper(int c) {
+    return putchar(c);
+}
+
+static int getchar_wrapper(void) {
+    return getchar();
+}
+
+static void bf_error(const char *msg) {
+    fprintf(stderr, "Error: %s\n", msg);
+    exit(1);
+}
+
+static char *read_file(const char *filename, size_t *size) {
+    FILE *file = fopen(filename, "r");
+    if (!file) {
+        bf_error("Could not open file");
+    }
+    
+    fseek(file, 0, SEEK_END);
+    *size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+    
+    char *content = malloc(*size + 1);
+    if (!content) {
+        bf_error("Memory allocation failed");
+    }
+    
+    fread(content, 1, *size, file);
+    content[*size] = '\0';
+    fclose(file);
+    
+    return content;
+}
+
+static void dump_code_hex(void *code, size_t size) {
+    printf("\nDumping %zu bytes of compiled machine code:\n", size);
+    unsigned char *bytes = (unsigned char *)code;
+    for (size_t i = 0; i < size; i++) {
+        if (i % 16 == 0) printf("%08zx: ", i);
+        printf("%02x ", bytes[i]);
+        if (i % 16 == 15) printf("\n");
+    }
+    if (size % 16 != 0) printf("\n");
+    printf("\n");
+}
+
+static bf_func compile_bf(const char *program, int debug_mode) {
+    dasm_State *state = NULL;
+    dasm_State **Dst = &state;
+    dasm_init(Dst, 1);
+    dasm_setup(Dst, actions);
+    
+    // Allocate enough PC labels for nested loops
+    dasm_growpc(Dst, MAX_NESTING * 2);
+    
+    int loop_stack[MAX_NESTING];
+    int loop_sp = 0;
+    int next_label = 0;
+    
+    |.section code
+    |.if X64_BUILD
+    |  push rbp
+    |  mov rbp, rsp
+    |  push rdi         // Save memory pointer
+    |  sub rsp, 8       // Align stack for function calls (16-byte alignment)
+    |.else
+    |  stp x29, x30, [sp, #-32]!
+    |  mov x29, sp
+    |  str x19, [sp, #16]
+    |  mov x19, x0
+    |.endif
+    
+    for (const char *pc = program; *pc; pc++) {
+        switch (*pc) {
+            case '>':
+                |.if X64_BUILD
+                |  add qword [rsp+8], 1    // Increment memory pointer on stack
+                |.else
+                |  add x19, x19, #1
+                |.endif
+                break;
+            case '<':
+                |.if X64_BUILD
+                |  sub qword [rsp+8], 1    // Decrement memory pointer on stack
+                |.else
+                |  sub x19, x19, #1
+                |.endif
+                break;
+            case '+':
+                |.if X64_BUILD
+                |  mov rax, [rsp+8]      // Load memory pointer from stack
+                |  inc byte [rax]        // Increment value at memory pointer
+                |.else
+                |  ldrb w0, [x19]
+                |  add w0, w0, #1
+                |  strb w0, [x19]
+                |.endif
+                break;
+            case '-':
+                |.if X64_BUILD
+                |  mov rax, [rsp+8]      // Load memory pointer from stack
+                |  dec byte [rax]        // Decrement value at memory pointer
+                |.else
+                |  ldrb w0, [x19]
+                |  sub w0, w0, #1
+                |  strb w0, [x19]
+                |.endif
+                break;
+            case '.':
+                |.if X64_BUILD
+                |  mov rax, [rsp+8]      // Load memory pointer from stack
+                |  movzx edi, byte [rax] // Load byte and put in first argument register
+                |  mov64 rax, (uintptr_t)putchar_wrapper  // Load function pointer into rax
+                |  call rax              // Call through register
+                |.else
+                |  ldrb w0, [x19]
+                |  sxtb w0, w0
+                |  mov x16, #(uintptr_t)putchar_wrapper & 0xffff
+                |  movk x16, #((uintptr_t)putchar_wrapper >> 16) & 0xffff, lsl #16
+                |  movk x16, #((uintptr_t)putchar_wrapper >> 32) & 0xffff, lsl #32
+                |  movk x16, #((uintptr_t)putchar_wrapper >> 48) & 0xffff, lsl #48
+                |  blr x16
+                |.endif
+                break;
+            case ',':
+                |.if X64_BUILD
+                |  mov64 rax, (uintptr_t)getchar_wrapper   // Load function pointer
+                |  call rax              // Call through register
+                |  mov rdx, [rsp+8]      // Load memory pointer from stack
+                |  mov [rdx], al         // Store result at memory pointer
+                |.else
+                |  mov x16, #(uintptr_t)getchar_wrapper & 0xffff
+                |  movk x16, #((uintptr_t)getchar_wrapper >> 16) & 0xffff, lsl #16
+                |  movk x16, #((uintptr_t)getchar_wrapper >> 32) & 0xffff, lsl #32
+                |  movk x16, #((uintptr_t)getchar_wrapper >> 48) & 0xffff, lsl #48
+                |  blr x16
+                |  strb w0, [x19]
+                |.endif
+                break;
+            case '[':
+                if (loop_sp >= MAX_NESTING) {
+                    bf_error("Too many nested loops");
+                }
+                int loop_start = next_label++;
+                int loop_end = next_label++;
+                loop_stack[loop_sp] = loop_start;
+                loop_sp++;
+                |.if X64_BUILD
+                |  mov rax, [rsp+8]      // Load memory pointer from stack
+                |  cmp byte [rax], 0     // Compare value at memory pointer
+                |  je =>(loop_end)
+                |.else
+                |  ldrb w0, [x19]
+                |  cbz w0, =>(loop_end)
+                |.endif
+                |=>(loop_start):
+                break;
+            case ']':
+                if (loop_sp == 0) {
+                    bf_error("Unmatched ']'");
+                }
+                loop_sp--;
+                int back_to_start = loop_stack[loop_sp];
+                int loop_exit = back_to_start + 1;
+                |.if X64_BUILD
+                |  mov rax, [rsp+8]      // Load memory pointer from stack
+                |  cmp byte [rax], 0     // Compare value at memory pointer
+                |  jne =>(back_to_start)
+                |.else
+                |  ldrb w0, [x19]
+                |  cbnz w0, =>(back_to_start)
+                |.endif
+                |=>(loop_exit):
+                break;
+        }
+    }
+    
+    if (loop_sp != 0) {
+        bf_error("Unmatched '['");
+    }
+    
+    |.if X64_BUILD
+    |  xor eax, eax
+    |  add rsp, 16      // Remove alignment padding and memory pointer
+    |  pop rbp
+    |  ret
+    |.else
+    |  mov w0, #0
+    |  ldr x19, [sp, #16]
+    |  ldp x29, x30, [sp], #32
+    |  ret
+    |.endif
+    
+    void *code = NULL;
+    size_t size;
+    dasm_link(Dst, &size);
+    
+    code = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    if (code == MAP_FAILED) {
+        bf_error("mmap failed");
+    }
+    
+    dasm_encode(Dst, code);
+    dasm_free(Dst);
+    
+    if (debug_mode) {
+        dump_code_hex(code, size);
+    }
+    
+    if (mprotect(code, size, PROT_READ | PROT_EXEC) != 0) {
+        bf_error("mprotect failed");
+    }
+    
+    return (bf_func)code;
+}
+
+int main(int argc, char *argv[]) {
+    int debug_mode = 0;
+    int arg_offset = 1;
+    
+    if (argc >= 2 && strcmp(argv[1], "-d") == 0) {
+        debug_mode = 1;
+        arg_offset = 2;
+    }
+    
+    if (argc < arg_offset + 1) {
+        fprintf(stderr, "Usage: %s [-d] <brainfuck_file>\n", argv[0]);
+        fprintf(stderr, "  -d: Enable debug mode (dump compiled code)\n");
+        return 1;
+    }
+    
+    printf("Reading file: %s\n", argv[arg_offset]);
+    size_t program_size;
+    char *program = read_file(argv[arg_offset], &program_size);
+    printf("Read %zu bytes\n", program_size);
+    
+    char *memory = calloc(BF_MEMORY_SIZE, 1);
+    if (!memory) {
+        bf_error("Memory allocation failed");
+    }
+    
+    printf("Compiling program for %s: %s\n", ARCH_STRING, program);
+    bf_func compiled_program = compile_bf(program, debug_mode);
+    printf("Compiled successfully, executing...\n");
+    
+    int result = compiled_program(memory);
+    printf("Execution complete, result: %d\n", result);
+    
+    free(program);
+    free(memory);
+    
+    return 0;
+}
