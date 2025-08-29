@@ -43,6 +43,50 @@ static void compile_bf_arch(dasm_State **Dst, char instruction) {
     }
 }
 
+// AMD64-specific optimized compilation function with run-length encoding
+static void compile_bf_arch_optimized(dasm_State **Dst, char instruction, int count) {
+    switch (instruction) {
+        case '>':
+            if (count == 1) {
+                |  add qword [rsp+8], 1
+            } else {
+                |  add qword [rsp+8], count
+            }
+            break;
+        case '<':
+            if (count == 1) {
+                |  sub qword [rsp+8], 1
+            } else {
+                |  sub qword [rsp+8], count
+            }
+            break;
+        case '+':
+            if (count == 1) {
+                |  mov rax, [rsp+8]
+                |  inc byte [rax]
+            } else if (count <= 127) {
+                |  mov rax, [rsp+8]
+                |  add byte [rax], count
+            } else {
+                |  mov rax, [rsp+8]
+                |  add byte [rax], count  // x86 allows larger immediates
+            }
+            break;
+        case '-':
+            if (count == 1) {
+                |  mov rax, [rsp+8]
+                |  dec byte [rax]
+            } else if (count <= 127) {
+                |  mov rax, [rsp+8]
+                |  sub byte [rax], count
+            } else {
+                |  mov rax, [rsp+8]
+                |  sub byte [rax], count  // x86 allows larger immediates
+            }
+            break;
+    }
+}
+
 static void compile_bf_prologue(dasm_State **Dst) {
     |  push rbp
     |  mov rbp, rsp

@@ -50,6 +50,68 @@ static void compile_bf_arch(dasm_State **Dst, char instruction) {
     }
 }
 
+// ARM64-specific optimized compilation function with run-length encoding
+static void compile_bf_arch_optimized(dasm_State **Dst, char instruction, int count) {
+    switch (instruction) {
+        case '>':
+            if (count == 1) {
+                |  add x19, x19, #1
+            } else if (count <= 4095) {
+                |  add x19, x19, #count
+            } else {
+                // Handle large counts that don't fit in immediate
+                |  mov x16, #count
+                |  add x19, x19, x16
+            }
+            break;
+        case '<':
+            if (count == 1) {
+                |  sub x19, x19, #1
+            } else if (count <= 4095) {
+                |  sub x19, x19, #count
+            } else {
+                // Handle large counts that don't fit in immediate
+                |  mov x16, #count
+                |  sub x19, x19, x16
+            }
+            break;
+        case '+':
+            if (count == 1) {
+                |  ldrb w0, [x19]
+                |  add w0, w0, #1
+                |  strb w0, [x19]
+            } else if (count <= 255) {
+                |  ldrb w0, [x19]
+                |  add w0, w0, #count
+                |  strb w0, [x19]
+            } else {
+                // Handle large counts or overflow
+                |  ldrb w0, [x19]
+                |  mov w16, #count
+                |  add w0, w0, w16
+                |  strb w0, [x19]
+            }
+            break;
+        case '-':
+            if (count == 1) {
+                |  ldrb w0, [x19]
+                |  sub w0, w0, #1
+                |  strb w0, [x19]
+            } else if (count <= 255) {
+                |  ldrb w0, [x19]
+                |  sub w0, w0, #count
+                |  strb w0, [x19]
+            } else {
+                // Handle large counts or overflow
+                |  ldrb w0, [x19]
+                |  mov w16, #count
+                |  sub w0, w0, w16
+                |  strb w0, [x19]
+            }
+            break;
+    }
+}
+
 static void compile_bf_prologue(dasm_State **Dst) {
     |  stp x29, x30, [sp, #-32]!
     |  mov x29, sp

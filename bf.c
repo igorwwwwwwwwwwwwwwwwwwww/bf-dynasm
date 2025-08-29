@@ -83,7 +83,21 @@ static bf_func compile_bf(const char *program, int debug_mode) {
             case '>':
             case '<':
             case '+':
-            case '-':
+            case '-': {
+                // Run-length encoding optimization for consecutive operations
+                char op = *pc;
+                int count = 1;
+                
+                // Count consecutive identical operations
+                while (pc[1] == op) {
+                    count++;
+                    pc++;
+                }
+                
+                // Generate optimized instruction with count
+                compile_bf_arch_optimized(Dst, op, count);
+                break;
+            }
             case '.':
             case ',':
                 compile_bf_arch(Dst, *pc);
