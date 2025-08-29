@@ -1,52 +1,68 @@
 CC = gcc
+CC_X64_MACOS = clang
 CFLAGS = -Wall -Wextra -O2 -std=c99
+CFLAGS_X64_MACOS = -target x86_64-apple-macos10.12 -Wall -Wextra -O2 -std=c99
 LUAJIT = luajit
+LUA_DOCKER = lua5.1
 
-TARGET_ARM64 = bf_interpreter
-TARGET_X64 = bf_interpreter_x64
+TARGET = bf
+TARGET_AMD64_DARWIN = bf_amd64_darwin
 DYNASM_DIR = luajit/dynasm
-DYNASM_DASC = bf_interpreter.dasc
-GENERATED_C_ARM64 = bf_interpreter.c
-GENERATED_C_X64 = bf_interpreter_x64.c
+MAIN_C = bf.c
+DYNASM_DASC_ARM64 = bf_arm64.dasc
+DYNASM_DASC_AMD64 = bf_amd64.dasc
+ARCH_C_ARM64 = bf_arm64.c
+ARCH_C_AMD64 = bf_amd64.c
 
-all: $(TARGET_ARM64)
+all: $(TARGET)
 
-arm64: $(TARGET_ARM64)
-x64: $(TARGET_X64)
-both: $(TARGET_ARM64) $(TARGET_X64)
+amd64-darwin: $(TARGET_AMD64_DARWIN)
 
 $(DYNASM_DIR):
 	@if [ ! -d "luajit" ]; then \
 		git clone https://github.com/LuaJIT/LuaJIT.git luajit; \
 	fi
 
-$(GENERATED_C_ARM64): $(DYNASM_DASC) $(DYNASM_DIR)
-	$(LUAJIT) $(DYNASM_DIR)/dynasm.lua -o $(GENERATED_C_ARM64) $(DYNASM_DASC)
+$(ARCH_C_ARM64): $(DYNASM_DASC_ARM64) $(DYNASM_DIR)
+	@if command -v $(LUAJIT) >/dev/null 2>&1; then \
+		$(LUAJIT) $(DYNASM_DIR)/dynasm.lua -o $(ARCH_C_ARM64) $(DYNASM_DASC_ARM64); \
+	else \
+		$(LUA_DOCKER) $(DYNASM_DIR)/dynasm.lua -o $(ARCH_C_ARM64) $(DYNASM_DASC_ARM64); \
+	fi
 
-$(GENERATED_C_X64): $(DYNASM_DASC) $(DYNASM_DIR)
-	$(LUAJIT) $(DYNASM_DIR)/dynasm.lua -D X64_BUILD -o $(GENERATED_C_X64) $(DYNASM_DASC)
+$(ARCH_C_AMD64): $(DYNASM_DASC_AMD64) $(DYNASM_DIR)
+	@if command -v $(LUAJIT) >/dev/null 2>&1; then \
+		$(LUAJIT) $(DYNASM_DIR)/dynasm.lua -o $(ARCH_C_AMD64) $(DYNASM_DASC_AMD64); \
+	else \
+		$(LUA_DOCKER) $(DYNASM_DIR)/dynasm.lua -o $(ARCH_C_AMD64) $(DYNASM_DASC_AMD64); \
+	fi
 
-$(TARGET_ARM64): $(GENERATED_C_ARM64)
-	$(CC) $(CFLAGS) -I$(DYNASM_DIR) -o $(TARGET_ARM64) $(GENERATED_C_ARM64)
+# Build only the architecture file needed for current platform
+ifeq ($(shell uname -m),x86_64)
+$(TARGET): $(ARCH_C_AMD64) $(MAIN_C)
+	$(CC) $(CFLAGS) -I$(DYNASM_DIR) -o $(TARGET) $(MAIN_C)
+else ifeq ($(shell uname -m),aarch64)
+$(TARGET): $(ARCH_C_ARM64) $(MAIN_C)
+	$(CC) $(CFLAGS) -I$(DYNASM_DIR) -o $(TARGET) $(MAIN_C)
+else
+$(TARGET): $(ARCH_C_ARM64) $(MAIN_C)
+	$(CC) $(CFLAGS) -I$(DYNASM_DIR) -o $(TARGET) $(MAIN_C)
+endif
 
-$(TARGET_X64): $(GENERATED_C_X64)
-	$(CC) $(CFLAGS) -I$(DYNASM_DIR) -DX64_BUILD -no-pie -o $(TARGET_X64) $(GENERATED_C_X64)
+$(TARGET_AMD64_DARWIN): $(ARCH_C_AMD64) $(MAIN_C)
+	$(CC_X64_MACOS) $(CFLAGS_X64_MACOS) -I$(DYNASM_DIR) -o $(TARGET_AMD64_DARWIN) $(MAIN_C)
 
 clean:
-	rm -f $(TARGET_ARM64) $(TARGET_X64) $(GENERATED_C_ARM64) $(GENERATED_C_X64)
+	rm -f $(TARGET) $(TARGET_AMD64_DARWIN) $(ARCH_C_ARM64) $(ARCH_C_AMD64)
 
-test: $(TARGET_ARM64)
-	@echo "Testing ARM64 version..."
-	./$(TARGET_ARM64) examples/hello.bf
+test: $(TARGET)
+	@echo "Testing native version..."
+	./$(TARGET) examples/hello.bf
 
-test-x64: $(TARGET_X64)
-	@echo "Testing x64 version..."
-	./$(TARGET_X64) examples/hello.bf
+test-amd64-darwin: $(TARGET_AMD64_DARWIN)
+	@echo "Testing AMD64 Darwin version (via Rosetta)..."
+	arch -x86_64 ./$(TARGET_AMD64_DARWIN) examples/hello.bf
 
-test-both: test test-x64
 
-test-debug: $(TARGET_ARM64)
-	@echo "Testing with debug mode..."
-	./$(TARGET_ARM64) -d examples/hello.bf
 
-.PHONY: all clean test test-x64 test-both test-debug arm64 x64 both
+.PHONY: all clean test test-amd64-darwin amd64-darwin

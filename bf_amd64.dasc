@@ -1,0 +1,74 @@
+|.arch x64
+|.actionlist actions
+|.section code
+
+// AMD64-specific wrapper functions
+static int putchar_wrapper(int c) {
+    return putchar(c);
+}
+
+static int getchar_wrapper(void) {
+    return getchar();
+}
+
+// AMD64-specific compilation function
+static void compile_bf_arch(dasm_State **Dst, char instruction) {
+    switch (instruction) {
+        case '>':
+            |  add qword [rsp+8], 1    // Increment memory pointer on stack
+            break;
+        case '<':
+            |  sub qword [rsp+8], 1    // Decrement memory pointer on stack
+            break;
+        case '+':
+            |  mov rax, [rsp+8]      // Load memory pointer from stack
+            |  inc byte [rax]        // Increment value at memory pointer
+            break;
+        case '-':
+            |  mov rax, [rsp+8]      // Load memory pointer from stack
+            |  dec byte [rax]        // Decrement value at memory pointer
+            break;
+        case '.':
+            |  mov rax, [rsp+8]      // Load memory pointer from stack
+            |  movzx edi, byte [rax] // Load byte and put in first argument register
+            |  mov64 rax, (uintptr_t)putchar_wrapper  // Load function pointer into rax
+            |  call rax              // Call through register
+            break;
+        case ',':
+            |  mov64 rax, (uintptr_t)getchar_wrapper   // Load function pointer
+            |  call rax              // Call through register
+            |  mov rdx, [rsp+8]      // Load memory pointer from stack
+            |  mov [rdx], al         // Store result at memory pointer
+            break;
+    }
+}
+
+static void compile_bf_prologue(dasm_State **Dst) {
+    |  push rbp
+    |  mov rbp, rsp
+    |  push rdi         // Save memory pointer
+    |  sub rsp, 8       // Align stack for function calls (16-byte alignment)
+}
+
+static void compile_bf_epilogue(dasm_State **Dst) {
+    |  xor eax, eax
+    |  add rsp, 16      // Remove alignment padding and memory pointer
+    |  pop rbp
+    |  ret
+}
+
+static void compile_bf_loop_start(dasm_State **Dst, int loop_end) {
+    |  mov rax, [rsp+8]      // Load memory pointer from stack
+    |  cmp byte [rax], 0     // Compare value at memory pointer
+    |  je =>(loop_end)
+}
+
+static void compile_bf_loop_end(dasm_State **Dst, int back_to_start) {
+    |  mov rax, [rsp+8]      // Load memory pointer from stack
+    |  cmp byte [rax], 0     // Compare value at memory pointer
+    |  jne =>(back_to_start)
+}
+
+static void compile_bf_label(dasm_State **Dst, int label) {
+    |=>(label):
+}

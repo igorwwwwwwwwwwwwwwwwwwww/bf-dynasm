@@ -1,0 +1,79 @@
+|.arch arm64
+|.actionlist actions
+|.section code
+
+// ARM64-specific wrapper functions
+static int putchar_wrapper(int c) {
+    return putchar(c);
+}
+
+static int getchar_wrapper(void) {
+    return getchar();
+}
+
+// ARM64-specific compilation function
+static void compile_bf_arch(dasm_State **Dst, char instruction) {
+    switch (instruction) {
+        case '>':
+            |  add x19, x19, #1
+            break;
+        case '<':
+            |  sub x19, x19, #1
+            break;
+        case '+':
+            |  ldrb w0, [x19]
+            |  add w0, w0, #1
+            |  strb w0, [x19]
+            break;
+        case '-':
+            |  ldrb w0, [x19]
+            |  sub w0, w0, #1
+            |  strb w0, [x19]
+            break;
+        case '.':
+            |  ldrb w0, [x19]
+            |  sxtb w0, w0
+            |  mov x16, #(uintptr_t)putchar_wrapper & 0xffff
+            |  movk x16, #((uintptr_t)putchar_wrapper >> 16) & 0xffff, lsl #16
+            |  movk x16, #((uintptr_t)putchar_wrapper >> 32) & 0xffff, lsl #32
+            |  movk x16, #((uintptr_t)putchar_wrapper >> 48) & 0xffff, lsl #48
+            |  blr x16
+            break;
+        case ',':
+            |  mov x16, #(uintptr_t)getchar_wrapper & 0xffff
+            |  movk x16, #((uintptr_t)getchar_wrapper >> 16) & 0xffff, lsl #16
+            |  movk x16, #((uintptr_t)getchar_wrapper >> 32) & 0xffff, lsl #32
+            |  movk x16, #((uintptr_t)getchar_wrapper >> 48) & 0xffff, lsl #48
+            |  blr x16
+            |  strb w0, [x19]
+            break;
+    }
+}
+
+static void compile_bf_prologue(dasm_State **Dst) {
+    |  stp x29, x30, [sp, #-32]!
+    |  mov x29, sp
+    |  str x19, [sp, #16]
+    |  mov x19, x0
+}
+
+static void compile_bf_epilogue(dasm_State **Dst) {
+    |  mov w0, #0
+    |  ldr x19, [sp, #16]
+    |  ldp x29, x30, [sp], #32
+    |  ret
+}
+
+static void compile_bf_loop_start(dasm_State **Dst, int loop_end) {
+    |  ldrb w0, [x19]
+    |  cbz w0, =>(loop_end)
+}
+
+static void compile_bf_loop_end(dasm_State **Dst, int back_to_start) {
+    |  ldrb w0, [x19]
+    |  cbnz w0, =>(back_to_start)
+}
+
+static void compile_bf_label(dasm_State **Dst, int label) {
+    |=>(label):
+}

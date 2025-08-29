@@ -22,14 +22,11 @@ A high-performance Brainfuck interpreter with Just-In-Time compilation using Dyn
 ### Build Commands
 
 ```bash
-# Build ARM64 version (default)
-make arm64
+# Build native version (default - ARM64 on ARM64, AMD64 on AMD64)
+make
 
-# Build x64 version
-make x64
-
-# Build both versions
-make both
+# Build AMD64 macOS cross-compiled version
+make amd64-darwin
 
 # Clean build files
 make clean
@@ -38,14 +35,14 @@ make clean
 ## Usage
 
 ```bash
-# Run Brainfuck program
-./bf_interpreter examples/hello.bf
+# Run Brainfuck program (native architecture)
+./bf examples/hello.bf
 
 # Run with debug mode (dumps machine code)
-./bf_interpreter -d examples/hello.bf
+./bf -d examples/hello.bf
 
-# x64 version (if available)
-./bf_interpreter_x64 examples/hello.bf
+# AMD64 version (via Rosetta on ARM64 Macs)
+arch -x86_64 ./bf_amd64_darwin examples/hello.bf
 ```
 
 ## Architecture Support
@@ -75,13 +72,13 @@ make clean
 
 ## Testing
 
-### Local Testing (ARM64)
+### Local Testing
 ```bash
-# Test ARM64 version
+# Test native version
 make test
 
-# Test with debug output
-make test-debug
+# Test AMD64 Darwin version (via Rosetta)
+make test-amd64-darwin
 ```
 
 ## Docker Multi-Platform Support
@@ -91,26 +88,13 @@ The project includes a multi-platform Dockerfile that automatically detects the 
 ### Quick Start with Docker
 
 ```bash
-# Build and run for your current platform
-docker build -t dynasm-bf .
+# Build multi-platform image (works on both x64 and ARM64)
+docker buildx build --platform=linux/amd64,linux/arm64 -t dynasm-bf .
+
+# Run on any platform (automatically selects correct architecture)
 docker run --rm dynasm-bf
 
 # Expected output: "Hello World!"
-```
-
-### Multi-Platform Docker Builds
-
-```bash
-# Build specifically for x64 (AMD64)
-docker build --platform=linux/amd64 -t dynasm-bf:x64 .
-docker run --rm --platform=linux/amd64 dynasm-bf:x64
-
-# Build specifically for ARM64
-docker build --platform=linux/arm64 -t dynasm-bf:arm64 .
-docker run --rm --platform=linux/arm64 dynasm-bf:arm64
-
-# Build both platforms (requires Docker Buildx)
-docker buildx build --platform=linux/amd64,linux/arm64 -t dynasm-bf:multi .
 ```
 
 ### Testing Different Brainfuck Programs
@@ -136,13 +120,14 @@ The Dockerfile automatically:
 ### Cross-Platform Testing
 
 ```bash
-# Test x64 version (with emulation if on ARM64 host)
-docker build --platform=linux/amd64 -t dynasm-bf:x64 .
-docker run --platform=linux/amd64 dynasm-bf:x64
+# Build once, test on both architectures
+docker buildx build --platform=linux/amd64,linux/arm64 -t dynasm-bf .
 
-# Test ARM64 version (with emulation if on x64 host)  
-docker build --platform=linux/arm64 -t dynasm-bf:arm64 .
-docker run --platform=linux/arm64 dynasm-bf:arm64
+# Test x64 version (with emulation if on ARM64 host)
+docker run --platform=linux/amd64 dynasm-bf
+
+# Test ARM64 version (with emulation if on x64 host)
+docker run --platform=linux/arm64 dynasm-bf
 
 # Both should output: "Hello World!"
 ```
@@ -183,17 +168,19 @@ The `examples/` directory contains various Brainfuck programs:
 
 ```
 dynasm-brainfuck/
-├── bf_interpreter.dasc     # DynASM source template
-├── bf_interpreter.c        # Generated ARM64 C code
-├── bf_interpreter_x64.c    # Generated x64 C code  
-├── bf_interpreter          # ARM64 executable
-├── bf_interpreter_x64      # x64 executable
-├── Makefile               # Multi-architecture build configuration
+├── bf.c                   # Main C source with architecture detection
+├── bf_arm64.dasc          # ARM64-specific DynASM template
+├── bf_amd64.dasc          # AMD64-specific DynASM template
+├── bf_arm64.c             # Generated ARM64 C code (build artifact)
+├── bf_amd64.c             # Generated AMD64 C code (build artifact)
+├── bf                     # Native executable
+├── bf_amd64_darwin        # AMD64 cross-compiled executable
+├── Makefile               # Simplified build configuration
 ├── Dockerfile             # Multi-platform Docker build
 ├── .dockerignore          # Docker build context exclusions
 ├── examples/              # Brainfuck test programs
 │   └── hello.bf           # Hello World example
-├── luajit/               # LuaJIT source (git submodule/auto-cloned)
+├── luajit/               # LuaJIT source (auto-cloned)
 │   ├── src/luajit        # LuaJIT executable
 │   └── dynasm/           # DynASM preprocessor
 └── README.md             # This documentation
@@ -234,14 +221,14 @@ docker buildx ls
 **"luajit: command not found":**
 ```bash
 # The Makefile will auto-download LuaJIT
-make arm64  # This will clone LuaJIT automatically
+make  # This will clone LuaJIT automatically
 ```
 
 **DynASM preprocessing errors:**
 ```bash
 # Clean and rebuild
 make clean
-make arm64
+make
 ```
 
 ## Contributing
