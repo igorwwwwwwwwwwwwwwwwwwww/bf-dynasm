@@ -1,5 +1,4 @@
 %{
-#include "bf_ast.h"
 #include "bf_parser.h"
 %}
 
@@ -9,6 +8,7 @@
 %option noinput
 %option reentrant
 %option bison-bridge
+%option header-file="bf_lexer.h"
 
 %%
 

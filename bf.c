@@ -8,29 +8,7 @@
 #include "dasm_proto.h"
 #include "bf_ast.h"
 
-// Define yyscan_t before including parser header
-#ifndef YY_TYPEDEF_YY_SCANNER_T
-#define YY_TYPEDEF_YY_SCANNER_T
-typedef void* yyscan_t;
-#endif
-
 #include "bf_parser.h"
-
-// Declare yylex function for reentrant parser
-int yylex(YYSTYPE *yylval_param, yyscan_t yyscanner);
-
-// Flex reentrant types and functions
-
-#ifndef YY_TYPEDEF_YY_BUFFER_STATE
-#define YY_TYPEDEF_YY_BUFFER_STATE
-typedef struct yy_buffer_state *YY_BUFFER_STATE;
-#endif
-
-extern int yylex_init(yyscan_t *scanner);
-extern int yylex_destroy(yyscan_t scanner);
-extern YY_BUFFER_STATE yy_scan_string(const char *str, yyscan_t scanner);
-extern void yy_delete_buffer(YY_BUFFER_STATE buffer, yyscan_t scanner);
-extern int yyparse(yyscan_t scanner, ast_node_t **result);
 
 #define BF_MEMORY_SIZE 30000
 #define MAX_NESTING 1000
@@ -75,27 +53,6 @@ static char *read_file(const char *filename, size_t *size) {
     return content;
 }
 
-static ast_node_t* parse_bf_program(const char *program) {
-    yyscan_t scanner;
-    YY_BUFFER_STATE buffer;
-    ast_node_t *result = NULL;
-    
-    if (yylex_init(&scanner) != 0) {
-        bf_error("Failed to initialize scanner");
-    }
-    
-    buffer = yy_scan_string(program, scanner);
-    
-    if (yyparse(scanner, &result) != 0) {
-        yy_delete_buffer(buffer, scanner);
-        yylex_destroy(scanner);
-        bf_error("Parser error");
-    }
-    
-    yy_delete_buffer(buffer, scanner);
-    yylex_destroy(scanner);
-    return result;
-}
 
 static void dump_code_hex(void *code, size_t size) {
     printf("\nDumping %zu bytes of compiled machine code:\n", size);

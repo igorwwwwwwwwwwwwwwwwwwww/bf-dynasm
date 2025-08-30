@@ -2,14 +2,29 @@
 #include "bf_ast.h"
 #include <stdio.h>
 #include <stdlib.h>
+%}
+
+%code requires {
+#include "bf_ast.h"
 
 #ifndef YY_TYPEDEF_YY_SCANNER_T
 #define YY_TYPEDEF_YY_SCANNER_T
 typedef void* yyscan_t;
 #endif
 
+#ifndef YY_TYPEDEF_YY_BUFFER_STATE
+#define YY_TYPEDEF_YY_BUFFER_STATE
+typedef struct yy_buffer_state *YY_BUFFER_STATE;
+#endif
+
+extern int yylex_init(yyscan_t *scanner);
+extern int yylex_destroy(yyscan_t scanner);
+extern YY_BUFFER_STATE yy_scan_string(const char *str, yyscan_t scanner);
+extern void yy_delete_buffer(YY_BUFFER_STATE buffer, yyscan_t scanner);
+
 void yyerror(yyscan_t scanner, ast_node_t **result, const char *s);
-%}
+ast_node_t* parse_bf_program(const char *program);
+}
 
 %define api.pure full
 %define parse.error verbose
@@ -70,4 +85,28 @@ void yyerror(yyscan_t scanner, ast_node_t **result, const char *s) {
     (void)scanner;
     (void)result;
     fprintf(stderr, "Parse error: %s\n", s);
+}
+
+ast_node_t* parse_bf_program(const char *program) {
+    yyscan_t scanner;
+    YY_BUFFER_STATE buffer;
+    ast_node_t *result = NULL;
+    
+    if (yylex_init(&scanner) != 0) {
+        fprintf(stderr, "Error: Failed to initialize scanner\n");
+        exit(1);
+    }
+    
+    buffer = yy_scan_string(program, scanner);
+    
+    if (yyparse(scanner, &result) != 0) {
+        yy_delete_buffer(buffer, scanner);
+        yylex_destroy(scanner);
+        fprintf(stderr, "Error: Parser error\n");
+        exit(1);
+    }
+    
+    yy_delete_buffer(buffer, scanner);
+    yylex_destroy(scanner);
+    return result;
 }

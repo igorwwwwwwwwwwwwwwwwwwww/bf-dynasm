@@ -10,5 +10,6 @@ luajit/
 
 # Generated parser/lexer files
 bf_lexer.c
+bf_lexer.h
 bf_parser.c
 bf_parser.h

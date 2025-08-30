@@ -26,6 +26,7 @@ PARSER_C = bf_parser.c
 PARSER_H = bf_parser.h
 LEXER_L = bf_lexer.l
 LEXER_C = bf_lexer.c
+LEXER_H = bf_lexer.h
 AST_C = bf_ast.c
 AST_H = bf_ast.h
 
@@ -42,7 +43,7 @@ $(DYNASM_DIR):
 $(PARSER_C) $(PARSER_H): $(PARSER_Y)
 	$(YACC) -d -o $(PARSER_C) $(PARSER_Y)
 
-$(LEXER_C): $(LEXER_L) $(PARSER_H)
+$(LEXER_C) $(LEXER_H): $(LEXER_L) $(PARSER_H)
 	$(LEX) -o $(LEXER_C) $(LEXER_L)
 
 $(ARCH_C_ARM64): $(DYNASM_DASC_ARM64) $(DYNASM_DIR)
