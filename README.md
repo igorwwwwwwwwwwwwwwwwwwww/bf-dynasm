@@ -18,10 +18,15 @@ A high-performance Brainfuck interpreter with Just-In-Time compilation using Dyn
 - GCC or Clang
 - LuaJIT (for DynASM preprocessing)
 - Make
+- Bison (parser generator)
+- Flex (lexical analyzer generator)
 
 ### Build Commands
 
 ```bash
+# Install dependencies on macOS
+brew install luajit flex bison
+
 # Build native version (default - ARM64 on ARM64, AMD64 on AMD64)
 make
 
@@ -111,10 +116,8 @@ docker run --rm dynasm-bf ./bf_interpreter -d examples/hello.bf
 
 The Dockerfile automatically:
 - Detects the target architecture (`x86_64` or `aarch64`)
-- Downloads and builds LuaJIT from source for reliability
-- Compiles the appropriate version with correct flags:
-  - **x64**: Uses `-DX64_BUILD` and `-no-pie` flags
-  - **ARM64**: Uses standard compilation
+- Uses system LuaJIT package for reliable builds
+- Compiles with automatic architecture detection via C preprocessor macros
 - Tests the built interpreter with the Hello World example
 
 ### Cross-Platform Testing
@@ -146,7 +149,8 @@ The `examples/` directory contains various Brainfuck programs:
 
 ### DynASM Integration
 - Uses LuaJIT's DynASM for runtime assembly generation
-- Conditional compilation for different architectures
+- Automatic architecture detection via C preprocessor macros (`__x86_64__`, `__aarch64__`)
+- Architecture-specific includes: `bf_amd64.c` for x64, `bf_arm64.c` for ARM64
 - PC labels for loop management with proper nesting
 
 ### Memory Model
@@ -164,27 +168,6 @@ The `examples/` directory contains various Brainfuck programs:
 - Architecture identification
 - Memory layout analysis
 
-## File Structure
-
-```
-dynasm-brainfuck/
-├── bf.c                   # Main C source with architecture detection
-├── bf_arm64.dasc          # ARM64-specific DynASM template
-├── bf_amd64.dasc          # AMD64-specific DynASM template
-├── bf_arm64.c             # Generated ARM64 C code (build artifact)
-├── bf_amd64.c             # Generated AMD64 C code (build artifact)
-├── bf                     # Native executable
-├── bf_amd64_darwin        # AMD64 cross-compiled executable
-├── Makefile               # Simplified build configuration
-├── Dockerfile             # Multi-platform Docker build
-├── .dockerignore          # Docker build context exclusions
-├── examples/              # Brainfuck test programs
-│   └── hello.bf           # Hello World example
-├── luajit/               # LuaJIT source (auto-cloned)
-│   ├── src/luajit        # LuaJIT executable
-│   └── dynasm/           # DynASM preprocessor
-└── README.md             # This documentation
-```
 
 ## Performance
 
