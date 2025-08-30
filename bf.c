@@ -107,7 +107,6 @@ static void ast_compile_direct(ast_node_t *node, dasm_State **Dst) {
             break;
 
         case AST_OUTPUT:
-            // Use the same call as traditional compiler
             compile_bf_arch(Dst, '.');
             break;
 
@@ -201,129 +200,14 @@ static bf_func compile_bf_ast(ast_node_t *ast, int debug_mode) {
     return (bf_func)code;
 }
 
-static bf_func compile_bf(const char *program, int debug_mode) {
-    dasm_State *state = NULL;
-    dasm_State **Dst = &state;
-    dasm_init(Dst, 1);
-    dasm_setup(Dst, actions);
-
-    // Allocate enough PC labels for nested loops
-    dasm_growpc(Dst, MAX_NESTING * 2);
-
-    int loop_stack[MAX_NESTING];
-    int loop_sp = 0;
-    int next_label = 0;
-
-    // Architecture-specific prologue
-    compile_bf_prologue(Dst);
-
-    for (const char *pc = program; *pc; pc++) {
-        switch (*pc) {
-            case '>':
-                // Check for copy loop optimization >[-<+>]<
-                if (pc[1] == '[' && pc[2] == '-' && pc[3] == '<' &&
-                    pc[4] == '+' && pc[5] == '>' && pc[6] == ']' && pc[7] == '<') {
-                    // Copy right to left pattern detected
-                    compile_bf_copy_right_to_left(Dst);
-                    pc += 7; // Skip the entire pattern
-                    break;
-                }
-                // Fall through to run-length encoding
-            case '<':
-            case '+':
-            case '-': {
-                // Run-length encoding optimization for consecutive operations
-                char op = *pc;
-                int count = 1;
-
-                // Count consecutive identical operations
-                while (pc[1] == op) {
-                    count++;
-                    pc++;
-                }
-
-                // Generate optimized instruction with count
-                compile_bf_arch_optimized(Dst, op, count);
-                break;
-            }
-            case '.':
-            case ',':
-                compile_bf_arch(Dst, *pc);
-                break;
-            case '[':
-                // Check for clear loop optimization [-]
-                if (pc[1] == '-' && pc[2] == ']') {
-                    // Clear loop detected: [-] -> mov byte [ptr], #0
-                    compile_bf_clear_cell(Dst);
-                    pc += 2; // Skip the '-]'
-                    break;
-                }
-
-                if (loop_sp >= MAX_NESTING) {
-                    bf_error("Too many nested loops");
-                }
-                int loop_start = next_label++;
-                int loop_end = next_label++;
-                loop_stack[loop_sp] = loop_start;
-                loop_sp++;
-                compile_bf_loop_start(Dst, loop_end);
-                compile_bf_label(Dst, loop_start);
-                break;
-            case ']':
-                if (loop_sp == 0) {
-                    bf_error("Unmatched ']'");
-                }
-                loop_sp--;
-                int back_to_start = loop_stack[loop_sp];
-                int loop_exit = back_to_start + 1;
-                compile_bf_loop_end(Dst, back_to_start);
-                compile_bf_label(Dst, loop_exit);
-                break;
-        }
-    }
-
-    if (loop_sp != 0) {
-        bf_error("Unmatched '['");
-    }
-
-    // Architecture-specific epilogue
-    compile_bf_epilogue(Dst);
-
-    void *code = NULL;
-    size_t size;
-    dasm_link(Dst, &size);
-
-    code = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-    if (code == MAP_FAILED) {
-        bf_error("mmap failed");
-    }
-
-    dasm_encode(Dst, code);
-    dasm_free(Dst);
-
-    if (debug_mode) {
-        dump_code_hex(code, size);
-    }
-
-    if (mprotect(code, size, PROT_READ | PROT_EXEC) != 0) {
-        bf_error("mprotect failed");
-    }
-
-    return (bf_func)code;
-}
-
 int main(int argc, char *argv[]) {
     int debug_mode = 0;
-    int use_ast = 1; // Default to AST compiler
     int arg_offset = 1;
 
     // Parse flags
     for (int i = 1; i < argc && argv[i][0] == '-'; i++) {
         if (strcmp(argv[i], "-d") == 0) {
             debug_mode = 1;
-            arg_offset++;
-        } else if (strcmp(argv[i], "--trad") == 0) {
-            use_ast = 0;
             arg_offset++;
         } else {
             fprintf(stderr, "Unknown flag: %s\n", argv[i]);
@@ -332,9 +216,8 @@ int main(int argc, char *argv[]) {
     }
 
     if (argc < arg_offset + 1) {
-        fprintf(stderr, "Usage: %s [-d] [--trad] <brainfuck_file>\n", argv[0]);
+        fprintf(stderr, "Usage: %s [-d] <brainfuck_file>\n", argv[0]);
         fprintf(stderr, "  -d: Enable debug mode (dump compiled code)\n");
-        fprintf(stderr, "  --trad: Use traditional string-based compiler instead of AST\n");
         return 1;
     }
 
@@ -344,30 +227,18 @@ int main(int argc, char *argv[]) {
     bf_func compiled_program;
     ast_node_t *ast = NULL;
 
-    if (use_ast) {
-        // Parse program into AST
-        ast = parse_bf_program(program);
+    // Parse program into AST
+    ast = parse_bf_program(program);
 
-        if (debug_mode) {
-            printf("Original AST dump:\n");
-            ast_print(ast, 0);
-            printf("\n");
-        }
+    // Optimize the AST
+    ast = ast_optimize(ast);
 
-        // Optimize the AST
-        ast = ast_optimize(ast);
-
-        if (debug_mode) {
-            printf("Optimized AST dump:\n");
-            ast_print(ast, 0);
-            printf("\n");
-        }
-
-        compiled_program = compile_bf_ast(ast, debug_mode);
-    } else {
-        // Use traditional string-based compiler
-        compiled_program = compile_bf(program, debug_mode);
+    if (debug_mode) {
+        printf("Optimized AST dump:\n");
+        ast_print(ast, 0);
     }
+
+    compiled_program = compile_bf_ast(ast, debug_mode);
 
     char *memory = calloc(BF_MEMORY_SIZE, 1);
     if (!memory) {

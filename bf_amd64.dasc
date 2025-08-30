@@ -93,14 +93,6 @@ static void compile_bf_clear_cell(dasm_State **Dst) {
     |  mov byte [rax], 0     // Clear the cell
 }
 
-// AMD64-specific copy right-to-left optimization for >[-<+>]< pattern
-static void compile_bf_copy_right_to_left(dasm_State **Dst) {
-    |  mov rax, [rsp+8]      // Load memory pointer
-    |  mov dl, [rax+1]       // Load from cell[ptr+1]
-    |  mov [rax], dl         // Store to cell[ptr]
-    |  mov byte [rax+1], 0   // Clear source cell[ptr+1]
-}
-
 // AMD64-specific copy current-to-left optimization for [-<+>] pattern
 static void compile_bf_copy_current_to_left(dasm_State **Dst) {
     |  mov rax, [rsp+8]      // Load memory pointer
