@@ -477,7 +477,8 @@ char *yytext;
 #include "bf_ast.h"
 #include "bf_parser.h"
 #line 479 "bf_lexer.c"
-#line 480 "bf_lexer.c"
+#define YY_NO_INPUT 1
+#line 481 "bf_lexer.c"
 
 #define INITIAL 0
 
@@ -537,8 +538,6 @@ extern int yywrap ( void );
 #endif
 
 #ifndef YY_NO_UNPUT
-    
-    static void yyunput ( int c, char *buf_ptr  );
     
 #endif
 
@@ -694,10 +693,10 @@ YY_DECL
 		}
 
 	{
-#line 9 "bf_lexer.l"
+#line 11 "bf_lexer.l"
 
 
-#line 700 "bf_lexer.c"
+#line 699 "bf_lexer.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -766,61 +765,61 @@ do_action:	/* This label is used only to access EOF actions. */
 
 case 1:
 YY_RULE_SETUP
-#line 11 "bf_lexer.l"
+#line 13 "bf_lexer.l"
 { return MOVE_RIGHT; }
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 12 "bf_lexer.l"
+#line 14 "bf_lexer.l"
 { return MOVE_LEFT; }
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 13 "bf_lexer.l"
+#line 15 "bf_lexer.l"
 { return INC_VAL; }
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 14 "bf_lexer.l"
+#line 16 "bf_lexer.l"
 { return DEC_VAL; }
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 15 "bf_lexer.l"
+#line 17 "bf_lexer.l"
 { return OUTPUT; }
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 16 "bf_lexer.l"
+#line 18 "bf_lexer.l"
 { return INPUT; }
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 17 "bf_lexer.l"
+#line 19 "bf_lexer.l"
 { return LOOP_START; }
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 18 "bf_lexer.l"
+#line 20 "bf_lexer.l"
 { return LOOP_END; }
 	YY_BREAK
 case 9:
 /* rule 9 can match eol */
 YY_RULE_SETUP
-#line 20 "bf_lexer.l"
+#line 22 "bf_lexer.l"
 { /* ignore whitespace and newlines */ }
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 21 "bf_lexer.l"
+#line 23 "bf_lexer.l"
 { /* ignore all other characters (comments) */ }
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 23 "bf_lexer.l"
+#line 25 "bf_lexer.l"
 ECHO;
 	YY_BREAK
-#line 823 "bf_lexer.c"
+#line 822 "bf_lexer.c"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 
@@ -1155,47 +1154,6 @@ static int yy_get_next_buffer (void)
 }
 
 #ifndef YY_NO_UNPUT
-
-    static void yyunput (int c, char * yy_bp )
-{
-	char *yy_cp;
-    
-    yy_cp = (yy_c_buf_p);
-
-	/* undo effects of setting up yytext */
-	*yy_cp = (yy_hold_char);
-
-	if ( yy_cp < YY_CURRENT_BUFFER_LVALUE->yy_ch_buf + 2 )
-		{ /* need to shift things up to make room */
-		/* +2 for EOB chars. */
-		int number_to_move = (yy_n_chars) + 2;
-		char *dest = &YY_CURRENT_BUFFER_LVALUE->yy_ch_buf[
-					YY_CURRENT_BUFFER_LVALUE->yy_buf_size + 2];
-		char *source =
-				&YY_CURRENT_BUFFER_LVALUE->yy_ch_buf[number_to_move];
-
-		while ( source > YY_CURRENT_BUFFER_LVALUE->yy_ch_buf )
-			*--dest = *--source;
-
-		yy_cp += (int) (dest - source);
-		yy_bp += (int) (dest - source);
-		YY_CURRENT_BUFFER_LVALUE->yy_n_chars =
-			(yy_n_chars) = (int) YY_CURRENT_BUFFER_LVALUE->yy_buf_size;
-
-		if ( yy_cp < YY_CURRENT_BUFFER_LVALUE->yy_ch_buf + 2 )
-			YY_FATAL_ERROR( "flex scanner push-back overflow" );
-		}
-
-	*--yy_cp = (char) c;
-
-    if ( c == '\n' ){
-        --yylineno;
-    }
-
-	(yytext_ptr) = yy_bp;
-	(yy_hold_char) = *yy_cp;
-	(yy_c_buf_p) = yy_cp;
-}
 
 #endif
 
@@ -1837,5 +1795,5 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 23 "bf_lexer.l"
+#line 25 "bf_lexer.l"
 

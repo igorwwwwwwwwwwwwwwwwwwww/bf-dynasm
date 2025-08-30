@@ -57,7 +57,7 @@ ast_node_t* ast_create_clear_cell(void) {
 }
 
 
-ast_node_t* ast_create_mul_const(int multiplier, int src_offset, int dst_offset) {
+ast_node_t* ast_create_mul_const(int multiplier, int src_offset, int dst_offset __attribute__((unused))) {
     ast_node_t *node = ast_create_node(AST_MUL_CONST);
     node->value = multiplier;
     node->offset = src_offset;
