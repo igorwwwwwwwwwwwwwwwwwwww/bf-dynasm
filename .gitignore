@@ -7,3 +7,8 @@ luajit/
 
 # Object files
 *.o
+
+# Generated parser/lexer files
+bf_lexer.c
+bf_parser.c
+bf_parser.h
