@@ -4,3 +4,6 @@ bf_arm64.c
 bf_amd64.c
 dynasm/
 luajit/
+
+# Object files
+*.o
