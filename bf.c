@@ -67,13 +67,13 @@ extern ast_node_t *parse_result;
 static ast_node_t* parse_bf_program(const char *program) {
     // Create buffer for parser input
     YY_BUFFER_STATE buffer = yy_scan_string(program);
-    
+
     parse_result = NULL;
     if (yyparse() != 0) {
         yy_delete_buffer(buffer);
         bf_error("Parser error");
     }
-    
+
     ast_node_t *result = parse_result;
     yy_delete_buffer(buffer);
     return result;
@@ -93,7 +93,6 @@ static void dump_code_hex(void *code, size_t size) {
 
 // Forward declarations
 static void ast_compile_direct(ast_node_t *node, dasm_State **Dst);
-static void ast_compile_direct_reset(void);
 
 static bf_func compile_bf_ast(ast_node_t *ast, int debug_mode) {
     dasm_State *state = NULL;
@@ -108,7 +107,6 @@ static bf_func compile_bf_ast(ast_node_t *ast, int debug_mode) {
     compile_bf_prologue(Dst);
 
     // Reset static variables and compile the AST
-    ast_compile_direct_reset();
     ast_compile_direct(ast, Dst);
 
     // Architecture-specific epilogue
@@ -144,42 +142,36 @@ static bf_func compile_bf_ast(ast_node_t *ast, int debug_mode) {
     return (bf_func)code;
 }
 
-// Reset static variables for AST compilation
-static void ast_compile_direct_reset(void) {
-    // This will reset the static label counter
-    ast_compile_direct(NULL, NULL);
-}
-
 // Direct AST compilation with access to static DynASM functions
 static void ast_compile_direct(ast_node_t *node, dasm_State **Dst) {
     static int next_label = 0;
-    
+
     // Handle reset call
     if (!node && !Dst) {
         next_label = 0;
         return;
     }
-    
+
     if (!node) return;
-    
+
     switch (node->type) {
         case AST_MOVE_PTR:
             compile_bf_move_ptr(Dst, node->value);
             break;
-            
+
         case AST_ADD_VAL:
             compile_bf_add_val(Dst, node->value);
             break;
-            
+
         case AST_OUTPUT:
             // Use the same call as traditional compiler
             compile_bf_arch(Dst, '.');
             break;
-            
+
         case AST_INPUT:
             compile_bf_input(Dst);
             break;
-            
+
         case AST_LOOP: {
             int start_label = next_label++;
             int end_label = next_label++;
@@ -190,11 +182,11 @@ static void ast_compile_direct(ast_node_t *node, dasm_State **Dst) {
             compile_bf_label(Dst, end_label);
             break;
         }
-        
+
         case AST_CLEAR_CELL:
             compile_bf_clear_cell(Dst);
             break;
-            
+
         case AST_COPY_CELL:
             // For now, only support copying current to left ([-<+>] pattern)
             if (node->value == -1) {
@@ -204,14 +196,14 @@ static void ast_compile_direct(ast_node_t *node, dasm_State **Dst) {
                 // Fall back to original loop
             }
             break;
-            
+
         case AST_SEQUENCE:
         case AST_MUL_CONST:
         case AST_SET_CONST:
             // These should be handled by optimization passes
             break;
     }
-    
+
     // Continue with next node
     if (node->next) {
         ast_compile_direct(node->next, Dst);
@@ -238,7 +230,7 @@ static bf_func compile_bf(const char *program, int debug_mode) {
         switch (*pc) {
             case '>':
                 // Check for copy loop optimization >[-<+>]<
-                if (pc[1] == '[' && pc[2] == '-' && pc[3] == '<' && 
+                if (pc[1] == '[' && pc[2] == '-' && pc[3] == '<' &&
                     pc[4] == '+' && pc[5] == '>' && pc[6] == ']' && pc[7] == '<') {
                     // Copy right to left pattern detected
                     compile_bf_copy_right_to_left(Dst);
@@ -252,13 +244,13 @@ static bf_func compile_bf(const char *program, int debug_mode) {
                 // Run-length encoding optimization for consecutive operations
                 char op = *pc;
                 int count = 1;
-                
+
                 // Count consecutive identical operations
                 while (pc[1] == op) {
                     count++;
                     pc++;
                 }
-                
+
                 // Generate optimized instruction with count
                 compile_bf_arch_optimized(Dst, op, count);
                 break;
@@ -275,7 +267,7 @@ static bf_func compile_bf(const char *program, int debug_mode) {
                     pc += 2; // Skip the '-]'
                     break;
                 }
-                
+
                 if (loop_sp >= MAX_NESTING) {
                     bf_error("Too many nested loops");
                 }
@@ -360,26 +352,26 @@ int main(int argc, char *argv[]) {
 
     bf_func compiled_program;
     ast_node_t *ast = NULL;
-    
+
     if (use_ast) {
         // Parse program into AST
         ast = parse_bf_program(program);
-        
+
         if (debug_mode) {
             printf("Original AST dump:\n");
             ast_print(ast, 0);
             printf("\n");
         }
-        
+
         // Optimize the AST
         ast = ast_optimize(ast);
-        
+
         if (debug_mode) {
             printf("Optimized AST dump:\n");
             ast_print(ast, 0);
             printf("\n");
         }
-        
+
         compiled_program = compile_bf_ast(ast, debug_mode);
     } else {
         // Use traditional string-based compiler
