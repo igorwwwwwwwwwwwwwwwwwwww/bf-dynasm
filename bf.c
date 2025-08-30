@@ -91,66 +91,9 @@ static void dump_code_hex(void *code, size_t size) {
     printf("\n");
 }
 
-// Forward declarations
-static void ast_compile_direct(ast_node_t *node, dasm_State **Dst);
-
-static bf_func compile_bf_ast(ast_node_t *ast, int debug_mode) {
-    dasm_State *state = NULL;
-    dasm_State **Dst = &state;
-    dasm_init(Dst, 1);
-    dasm_setup(Dst, actions);
-
-    // Allocate enough PC labels for nested loops
-    dasm_growpc(Dst, MAX_NESTING * 2);
-
-    // Architecture-specific prologue
-    compile_bf_prologue(Dst);
-
-    // Reset static variables and compile the AST
-    ast_compile_direct(ast, Dst);
-
-    // Architecture-specific epilogue
-    compile_bf_epilogue(Dst);
-
-    // Link and encode
-    size_t size;
-    int ret = dasm_link(Dst, &size);
-    if (ret != 0) {
-        bf_error("DynASM linking failed");
-    }
-
-    void *code = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (code == MAP_FAILED) {
-        bf_error("Memory mapping failed");
-    }
-
-    ret = dasm_encode(Dst, code);
-    if (ret != 0) {
-        bf_error("DynASM encoding failed");
-    }
-
-    // Make code executable
-    if (mprotect(code, size, PROT_READ | PROT_EXEC) != 0) {
-        bf_error("Memory protection failed");
-    }
-
-    if (debug_mode) {
-        dump_code_hex(code, size);
-    }
-
-    dasm_free(Dst);
-    return (bf_func)code;
-}
-
 // Direct AST compilation with access to static DynASM functions
 static void ast_compile_direct(ast_node_t *node, dasm_State **Dst) {
     static int next_label = 0;
-
-    // Handle reset call
-    if (!node && !Dst) {
-        next_label = 0;
-        return;
-    }
 
     if (!node) return;
 
@@ -208,6 +151,54 @@ static void ast_compile_direct(ast_node_t *node, dasm_State **Dst) {
     if (node->next) {
         ast_compile_direct(node->next, Dst);
     }
+}
+
+static bf_func compile_bf_ast(ast_node_t *ast, int debug_mode) {
+    dasm_State *state = NULL;
+    dasm_State **Dst = &state;
+    dasm_init(Dst, 1);
+    dasm_setup(Dst, actions);
+
+    // Allocate enough PC labels for nested loops
+    dasm_growpc(Dst, MAX_NESTING * 2);
+
+    // Architecture-specific prologue
+    compile_bf_prologue(Dst);
+
+    // Reset static variables and compile the AST
+    ast_compile_direct(ast, Dst);
+
+    // Architecture-specific epilogue
+    compile_bf_epilogue(Dst);
+
+    // Link and encode
+    size_t size;
+    int ret = dasm_link(Dst, &size);
+    if (ret != 0) {
+        bf_error("DynASM linking failed");
+    }
+
+    void *code = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (code == MAP_FAILED) {
+        bf_error("Memory mapping failed");
+    }
+
+    ret = dasm_encode(Dst, code);
+    if (ret != 0) {
+        bf_error("DynASM encoding failed");
+    }
+
+    // Make code executable
+    if (mprotect(code, size, PROT_READ | PROT_EXEC) != 0) {
+        bf_error("Memory protection failed");
+    }
+
+    if (debug_mode) {
+        dump_code_hex(code, size);
+    }
+
+    dasm_free(Dst);
+    return (bf_func)code;
 }
 
 static bf_func compile_bf(const char *program, int debug_mode) {
