@@ -130,3 +130,28 @@ static void compile_bf_loop_end(dasm_State **Dst, int back_to_start) {
 static void compile_bf_label(dasm_State **Dst, int label) {
     |=>(label):
 }
+
+// AST-based compilation wrapper functions
+static void compile_bf_move_ptr(dasm_State **Dst, int count) {
+    if (count > 0) {
+        compile_bf_arch_optimized(Dst, '>', count);
+    } else if (count < 0) {
+        compile_bf_arch_optimized(Dst, '<', -count);
+    }
+}
+
+static void compile_bf_add_val(dasm_State **Dst, int count) {
+    if (count > 0) {
+        compile_bf_arch_optimized(Dst, '+', count);
+    } else if (count < 0) {
+        compile_bf_arch_optimized(Dst, '-', -count);
+    }
+}
+
+static void compile_bf_output(dasm_State **Dst) {
+    compile_bf_arch(Dst, '.');
+}
+
+static void compile_bf_input(dasm_State **Dst) {
+    compile_bf_arch(Dst, ',');
+}
