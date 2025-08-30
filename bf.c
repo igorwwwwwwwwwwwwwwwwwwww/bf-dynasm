@@ -7,16 +7,30 @@
 
 #include "dasm_proto.h"
 #include "bf_ast.h"
+
+// Define yyscan_t before including parser header
+#ifndef YY_TYPEDEF_YY_SCANNER_T
+#define YY_TYPEDEF_YY_SCANNER_T
+typedef void* yyscan_t;
+#endif
+
 #include "bf_parser.h"
 
-// Flex types and functions
+// Declare yylex function for reentrant parser
+int yylex(YYSTYPE *yylval_param, yyscan_t yyscanner);
+
+// Flex reentrant types and functions
+
 #ifndef YY_TYPEDEF_YY_BUFFER_STATE
 #define YY_TYPEDEF_YY_BUFFER_STATE
 typedef struct yy_buffer_state *YY_BUFFER_STATE;
 #endif
 
-extern YY_BUFFER_STATE yy_scan_string(const char *str);
-extern void yy_delete_buffer(YY_BUFFER_STATE buffer);
+extern int yylex_init(yyscan_t *scanner);
+extern int yylex_destroy(yyscan_t scanner);
+extern YY_BUFFER_STATE yy_scan_string(const char *str, yyscan_t scanner);
+extern void yy_delete_buffer(YY_BUFFER_STATE buffer, yyscan_t scanner);
+extern int yyparse(yyscan_t scanner, ast_node_t **result);
 
 #define BF_MEMORY_SIZE 30000
 #define MAX_NESTING 1000
@@ -61,21 +75,25 @@ static char *read_file(const char *filename, size_t *size) {
     return content;
 }
 
-// Global variable to receive parse result
-extern ast_node_t *parse_result;
-
 static ast_node_t* parse_bf_program(const char *program) {
-    // Create buffer for parser input
-    YY_BUFFER_STATE buffer = yy_scan_string(program);
-
-    parse_result = NULL;
-    if (yyparse() != 0) {
-        yy_delete_buffer(buffer);
+    yyscan_t scanner;
+    YY_BUFFER_STATE buffer;
+    ast_node_t *result = NULL;
+    
+    if (yylex_init(&scanner) != 0) {
+        bf_error("Failed to initialize scanner");
+    }
+    
+    buffer = yy_scan_string(program, scanner);
+    
+    if (yyparse(scanner, &result) != 0) {
+        yy_delete_buffer(buffer, scanner);
+        yylex_destroy(scanner);
         bf_error("Parser error");
     }
-
-    ast_node_t *result = parse_result;
-    yy_delete_buffer(buffer);
+    
+    yy_delete_buffer(buffer, scanner);
+    yylex_destroy(scanner);
     return result;
 }
 
@@ -92,10 +110,8 @@ static void dump_code_hex(void *code, size_t size) {
 }
 
 // Direct AST compilation with access to static DynASM functions
-static void ast_compile_direct(ast_node_t *node, dasm_State **Dst) {
-    static int next_label = 0;
-
-    if (!node) return;
+static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label) {
+    if (!node) return next_label;
 
     switch (node->type) {
         case AST_MOVE_PTR:
@@ -119,7 +135,7 @@ static void ast_compile_direct(ast_node_t *node, dasm_State **Dst) {
             int end_label = next_label++;
             compile_bf_loop_start(Dst, end_label);
             compile_bf_label(Dst, start_label);
-            ast_compile_direct(node->body, Dst);
+            next_label = ast_compile_direct(node->body, Dst, next_label);
             compile_bf_loop_end(Dst, start_label);
             compile_bf_label(Dst, end_label);
             break;
@@ -148,8 +164,10 @@ static void ast_compile_direct(ast_node_t *node, dasm_State **Dst) {
 
     // Continue with next node
     if (node->next) {
-        ast_compile_direct(node->next, Dst);
+        next_label = ast_compile_direct(node->next, Dst, next_label);
     }
+    
+    return next_label;
 }
 
 static bf_func compile_bf_ast(ast_node_t *ast, int debug_mode) {
@@ -164,8 +182,8 @@ static bf_func compile_bf_ast(ast_node_t *ast, int debug_mode) {
     // Architecture-specific prologue
     compile_bf_prologue(Dst);
 
-    // Reset static variables and compile the AST
-    ast_compile_direct(ast, Dst);
+    // Compile the AST (starting with label 0)
+    ast_compile_direct(ast, Dst, 0);
 
     // Architecture-specific epilogue
     compile_bf_epilogue(Dst);
@@ -199,6 +217,7 @@ static bf_func compile_bf_ast(ast_node_t *ast, int debug_mode) {
     dasm_free(Dst);
     return (bf_func)code;
 }
+
 
 int main(int argc, char *argv[]) {
     int debug_mode = 0;

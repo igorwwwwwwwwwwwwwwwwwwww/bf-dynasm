@@ -3,19 +3,25 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-extern int yylex();
-extern int yylineno;
-extern char *yytext;
+#ifndef YY_TYPEDEF_YY_SCANNER_T
+#define YY_TYPEDEF_YY_SCANNER_T
+typedef void* yyscan_t;
+#endif
 
-ast_node_t *parse_result = NULL;
-
-void yyerror(const char *s);
+void yyerror(yyscan_t scanner, ast_node_t **result, const char *s);
 %}
 
+%define api.pure full
 %define parse.error verbose
+%parse-param {yyscan_t scanner} {ast_node_t **result}
+%lex-param {yyscan_t scanner}
 
 %union {
     ast_node_t *node;
+}
+
+%code {
+    int yylex(YYSTYPE *yylval_param, yyscan_t yyscanner);
 }
 
 %token MOVE_RIGHT MOVE_LEFT INC_VAL DEC_VAL OUTPUT INPUT LOOP_START LOOP_END
@@ -26,8 +32,8 @@ void yyerror(const char *s);
 %%
 
 program:
-    statement_list          { parse_result = $1; }
-    | /* empty */           { parse_result = NULL; }
+    statement_list          { *result = $1; }
+    | /* empty */           { *result = NULL; }
     ;
 
 statement_list:
@@ -60,6 +66,8 @@ loop:
 
 %%
 
-void yyerror(const char *s) {
-    fprintf(stderr, "Parse error at line %d: %s\n", yylineno, s);
+void yyerror(yyscan_t scanner, ast_node_t **result, const char *s) {
+    (void)scanner;
+    (void)result;
+    fprintf(stderr, "Parse error: %s\n", s);
 }

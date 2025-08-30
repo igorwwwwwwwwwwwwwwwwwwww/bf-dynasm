@@ -7,6 +7,8 @@
 %option noyywrap
 %option nounput
 %option noinput
+%option reentrant
+%option bison-bridge
 
 %%
 
