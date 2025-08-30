@@ -126,6 +126,14 @@ static void compile_bf_copy_right_to_left(dasm_State **Dst) {
     |  strb w0, [x19, #1]     // Clear source cell[ptr+1]
 }
 
+// ARM64-specific copy current-to-left optimization for [-<+>] pattern  
+static void compile_bf_copy_current_to_left(dasm_State **Dst) {
+    |  ldrb w0, [x19]         // Load from cell[ptr] (current)
+    |  strb w0, [x19, #-1]    // Store to cell[ptr-1] (left) 
+    |  mov w0, #0             // Clear temp register
+    |  strb w0, [x19]         // Clear current cell[ptr]
+}
+
 static void compile_bf_prologue(dasm_State **Dst) {
     |  stp x29, x30, [sp, #-32]!
     |  mov x29, sp

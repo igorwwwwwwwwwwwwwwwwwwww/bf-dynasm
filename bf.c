@@ -195,6 +195,16 @@ static void ast_compile_direct(ast_node_t *node, dasm_State **Dst) {
             compile_bf_clear_cell(Dst);
             break;
             
+        case AST_COPY_CELL:
+            // For now, only support copying current to left ([-<+>] pattern)
+            if (node->value == -1) {
+                compile_bf_copy_current_to_left(Dst);
+            } else {
+                // Other copy directions not implemented yet
+                // Fall back to original loop
+            }
+            break;
+            
         case AST_SEQUENCE:
         case AST_MUL_CONST:
         case AST_SET_CONST:

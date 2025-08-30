@@ -56,6 +56,12 @@ ast_node_t* ast_create_clear_cell(void) {
     return ast_create_node(AST_CLEAR_CELL);
 }
 
+ast_node_t* ast_create_copy_cell(int src_offset, int dst_offset) {
+    ast_node_t *node = ast_create_node(AST_COPY_CELL);
+    node->offset = src_offset;
+    node->value = dst_offset;
+    return node;
+}
 
 ast_node_t* ast_create_mul_const(int multiplier, int src_offset, int dst_offset __attribute__((unused))) {
     ast_node_t *node = ast_create_node(AST_MUL_CONST);
@@ -90,6 +96,7 @@ static const char* ast_type_name(ast_node_type_t type) {
         case AST_LOOP: return "LOOP";
         case AST_SEQUENCE: return "SEQUENCE";
         case AST_CLEAR_CELL: return "CLEAR_CELL";
+        case AST_COPY_CELL: return "COPY_CELL";
         case AST_MUL_CONST: return "MUL_CONST";
         case AST_SET_CONST: return "SET_CONST";
         default: return "UNKNOWN";
@@ -155,6 +162,24 @@ ast_node_t* ast_optimize(ast_node_t *node) {
         node->body = NULL;
     }
     
+    // Copy loop optimization: detect [-<+>] pattern (copy current to left)
+    if (node->type == AST_LOOP && node->body) {
+        ast_node_t *curr = node->body;
+        // Check pattern: ADD_VAL(-1) -> MOVE_PTR(-1) -> ADD_VAL(1) -> MOVE_PTR(1)
+        if (curr->type == AST_ADD_VAL && curr->value == -1 &&
+            curr->next && curr->next->type == AST_MOVE_PTR && curr->next->value == -1 &&
+            curr->next->next && curr->next->next->type == AST_ADD_VAL && curr->next->next->value == 1 &&
+            curr->next->next->next && curr->next->next->next->type == AST_MOVE_PTR && curr->next->next->next->value == 1 &&
+            !curr->next->next->next->next) {
+            // This is [-<+>] which copies current cell to left cell and clears current
+            // Replace with copy cell operation
+            ast_free(node->body);
+            node->type = AST_COPY_CELL;
+            node->body = NULL;
+            node->offset = 0;  // src is current position  
+            node->value = -1;  // dst is left (-1 offset)
+        }
+    }
     
     return node;
 }

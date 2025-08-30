@@ -14,6 +14,7 @@ typedef enum {
     
     // Optimized high-level operations
     AST_CLEAR_CELL,     // Optimized [-]
+    AST_COPY_CELL,      // Optimized [-<+>] (copy current to left)
     AST_MUL_CONST,      // Optimized ++++[>+++<-]
     AST_SET_CONST,      // Direct constant assignment
 } ast_node_type_t;
@@ -37,6 +38,7 @@ ast_node_t* ast_create_sequence(ast_node_t *first, ast_node_t *second);
 
 // Optimized AST nodes
 ast_node_t* ast_create_clear_cell(void);
+ast_node_t* ast_create_copy_cell(int src_offset, int dst_offset);
 ast_node_t* ast_create_mul_const(int multiplier, int src_offset, int dst_offset);
 ast_node_t* ast_create_set_const(int value);
 
