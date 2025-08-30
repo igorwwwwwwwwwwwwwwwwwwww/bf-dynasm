@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <assert.h>
 
 #include "dasm_proto.h"
 #include "bf_ast.h"
@@ -103,19 +104,16 @@ static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label
             break;
 
         case AST_COPY_CELL:
-            // For now, only support copying current to left ([-<+>] pattern)
-            if (node->value == -1) {
-                compile_bf_copy_current_to_left(Dst);
-            } else {
-                // Other copy directions not implemented yet
-                // Fall back to original loop
-            }
+            assert(node->value == -1); // Only [-<+>] pattern is currently supported
+            compile_bf_copy_current_to_left(Dst);
             break;
 
         case AST_SEQUENCE:
+            assert(0); // Should be flattened during parsing
+            break;
         case AST_MUL_CONST:
         case AST_SET_CONST:
-            // These should be handled by optimization passes
+            assert(0); // Not implemented
             break;
     }
 
