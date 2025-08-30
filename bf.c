@@ -81,6 +81,15 @@ static bf_func compile_bf(const char *program, int debug_mode) {
     for (const char *pc = program; *pc; pc++) {
         switch (*pc) {
             case '>':
+                // Check for copy loop optimization >[-<+>]<
+                if (pc[1] == '[' && pc[2] == '-' && pc[3] == '<' && 
+                    pc[4] == '+' && pc[5] == '>' && pc[6] == ']' && pc[7] == '<') {
+                    // Copy right to left pattern detected
+                    compile_bf_copy_right_to_left(Dst);
+                    pc += 7; // Skip the entire pattern
+                    break;
+                }
+                // Fall through to run-length encoding
             case '<':
             case '+':
             case '-': {
