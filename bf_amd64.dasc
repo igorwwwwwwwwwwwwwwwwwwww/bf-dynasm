@@ -87,7 +87,7 @@ static void compile_bf_arch_optimized(dasm_State **Dst, char instruction, int co
     }
 }
 
-// AMD64-specific clear cell optimization for [-] pattern  
+// AMD64-specific clear cell optimization for [-] pattern
 static void compile_bf_clear_cell(dasm_State **Dst) {
     |  mov rax, [rsp+8]      // Load memory pointer
     |  mov byte [rax], 0     // Clear the cell
@@ -97,8 +97,16 @@ static void compile_bf_clear_cell(dasm_State **Dst) {
 static void compile_bf_copy_right_to_left(dasm_State **Dst) {
     |  mov rax, [rsp+8]      // Load memory pointer
     |  mov dl, [rax+1]       // Load from cell[ptr+1]
-    |  mov [rax], dl         // Store to cell[ptr] 
+    |  mov [rax], dl         // Store to cell[ptr]
     |  mov byte [rax+1], 0   // Clear source cell[ptr+1]
+}
+
+// AMD64-specific copy current-to-left optimization for [-<+>] pattern
+static void compile_bf_copy_current_to_left(dasm_State **Dst) {
+    |  mov rax, [rsp+8]      // Load memory pointer
+    |  mov dl, [rax]         // Load from cell[ptr] (current)
+    |  mov [rax-1], dl       // Store to cell[ptr-1] (left)
+    |  mov byte [rax], 0     // Clear current cell[ptr]
 }
 
 static void compile_bf_prologue(dasm_State **Dst) {
@@ -146,10 +154,6 @@ static void compile_bf_add_val(dasm_State **Dst, int count) {
     } else if (count < 0) {
         compile_bf_arch_optimized(Dst, '-', -count);
     }
-}
-
-static void compile_bf_output(dasm_State **Dst) {
-    compile_bf_arch(Dst, '.');
 }
 
 static void compile_bf_input(dasm_State **Dst) {
