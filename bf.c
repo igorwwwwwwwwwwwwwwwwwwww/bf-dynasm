@@ -101,8 +101,7 @@ static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label
 
 
         case AST_COPY_CELL:
-            assert(node->data.copy.dst_offset == -1); // Only [-<+>] pattern is currently supported
-            compile_bf_copy_current_to_left(Dst);
+            compile_bf_copy_cell(Dst, node->data.copy.dst_offset);
             break;
 
         case AST_MUL_CONST:

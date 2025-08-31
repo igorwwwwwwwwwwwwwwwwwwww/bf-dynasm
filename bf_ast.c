@@ -186,15 +186,7 @@ static int is_safe_multiplication_pattern(ast_node_t *node) {
 ast_node_t* ast_optimize(ast_node_t *node) {
     if (!node) return NULL;
     
-    // First optimize children recursively
-    if (node->type == AST_LOOP && node->data.loop.body) {
-        node->data.loop.body = ast_optimize(node->data.loop.body);
-    }
-    if (node->next) {
-        node->next = ast_optimize(node->next);
-    }
-    
-    // Run-length encoding: combine consecutive ADD_VAL or MOVE_PTR operations
+    // Run-length encoding: combine consecutive ADD_VAL or MOVE_PTR operations FIRST
     if (node->next && node->type == node->next->type) {
         if (node->type == AST_ADD_VAL || node->type == AST_MOVE_PTR) {
             // Combine with next node
@@ -208,6 +200,57 @@ ast_node_t* ast_optimize(ast_node_t *node) {
         }
     }
     
+    // Copy loop optimization: detect copy patterns BEFORE recursive optimization
+    // This must come before child optimization to catch the original MOVE_PTR patterns
+    if (node->type == AST_LOOP && node->data.loop.body) {
+        ast_node_t *curr = node->data.loop.body;
+        
+        // Pattern 1: [>+<-] -> MOVE_PTR(offset) -> ADD_VAL(1) -> MOVE_PTR(-offset) -> ADD_VAL(-1)
+        if (curr->type == AST_MOVE_PTR &&
+            curr->next && curr->next->type == AST_ADD_VAL && curr->next->data.basic.count == 1 &&
+            curr->next->next && curr->next->next->type == AST_MOVE_PTR && 
+            curr->next->next->data.basic.count == -curr->data.basic.count &&
+            curr->next->next->next && curr->next->next->next->type == AST_ADD_VAL && 
+            curr->next->next->next->data.basic.count == -1 &&
+            !curr->next->next->next->next) {
+            // This is [MOVE+MOVE_BACK-] which copies current cell to offset and clears current
+            int offset = curr->data.basic.count;
+            // Replace with copy cell operation
+            ast_free(node->data.loop.body);
+            node->type = AST_COPY_CELL;
+            node->data.copy.src_offset = 0;   // src is current position  
+            node->data.copy.dst_offset = offset;  // dst is at offset
+            // Continue optimizing from current node
+            return ast_optimize(node);
+        }
+        
+        // Pattern 2: [-<+>] -> ADD_VAL(-1) -> MOVE_PTR(offset) -> ADD_VAL(1) -> MOVE_PTR(-offset)
+        else if (curr->type == AST_ADD_VAL && curr->data.basic.count == -1 &&
+            curr->next && curr->next->type == AST_MOVE_PTR &&
+            curr->next->next && curr->next->next->type == AST_ADD_VAL && curr->next->next->data.basic.count == 1 &&
+            curr->next->next->next && curr->next->next->next->type == AST_MOVE_PTR && 
+            curr->next->next->next->data.basic.count == -curr->next->data.basic.count &&
+            !curr->next->next->next->next) {
+            // This is [-MOVE+MOVE_BACK] which copies current cell to offset and clears current
+            int offset = curr->next->data.basic.count;
+            // Replace with copy cell operation
+            ast_free(node->data.loop.body);
+            node->type = AST_COPY_CELL;
+            node->data.copy.src_offset = 0;   // src is current position  
+            node->data.copy.dst_offset = offset;  // dst is at offset
+            // Continue optimizing from current node
+            return ast_optimize(node);
+        }
+    }
+    
+    // Now optimize children recursively (after copy detection)
+    if (node->type == AST_LOOP && node->data.loop.body) {
+        node->data.loop.body = ast_optimize(node->data.loop.body);
+    }
+    if (node->next) {
+        node->next = ast_optimize(node->next);
+    }
+    
     // Clear loop optimization: detect [-] pattern
     if (node->type == AST_LOOP && node->data.loop.body && 
         node->data.loop.body->type == AST_ADD_VAL && node->data.loop.body->data.basic.count == -1 &&
@@ -216,24 +259,6 @@ ast_node_t* ast_optimize(ast_node_t *node) {
         ast_free(node->data.loop.body);
         node->type = AST_SET_CONST;
         node->data.set_const.value = 0;
-    }
-    
-    // Copy loop optimization: detect [-<+>] pattern (copy current to left)
-    if (node->type == AST_LOOP && node->data.loop.body) {
-        ast_node_t *curr = node->data.loop.body;
-        // Check pattern: ADD_VAL(-1) -> MOVE_PTR(-1) -> ADD_VAL(1) -> MOVE_PTR(1)
-        if (curr->type == AST_ADD_VAL && curr->data.basic.count == -1 &&
-            curr->next && curr->next->type == AST_MOVE_PTR && curr->next->data.basic.count == -1 &&
-            curr->next->next && curr->next->next->type == AST_ADD_VAL && curr->next->next->data.basic.count == 1 &&
-            curr->next->next->next && curr->next->next->next->type == AST_MOVE_PTR && curr->next->next->next->data.basic.count == 1 &&
-            !curr->next->next->next->next) {
-            // This is [-<+>] which copies current cell to left cell and clears current
-            // Replace with copy cell operation
-            ast_free(node->data.loop.body);
-            node->type = AST_COPY_CELL;
-            node->data.copy.src_offset = 0;  // src is current position  
-            node->data.copy.dst_offset = -1;  // dst is left (-1 offset)
-        }
     }
     
     // Multiplication loop optimization: detect SET_VAL + [>MUL<-] patterns  
@@ -257,6 +282,7 @@ ast_node_t* ast_optimize(ast_node_t *node) {
         ast_free(loop->data.loop.body);
         free(loop);
     }
+    
     
     // Offset ADD optimization: detect MOVE_PTR + ADD_VAL + MOVE_PTR patterns
     if (node->type == AST_MOVE_PTR && node->next && 

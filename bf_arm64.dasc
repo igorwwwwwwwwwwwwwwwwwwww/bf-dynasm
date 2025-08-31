@@ -113,12 +113,22 @@ static void compile_bf_arch_optimized(dasm_State **Dst, char instruction, int co
 }
 
 
-// ARM64-specific copy current-to-left optimization for [-<+>] pattern
-static void compile_bf_copy_current_to_left(dasm_State **Dst) {
-    |  ldrb w0, [x19]         // Load from cell[ptr] (current)
-    |  strb w0, [x19, #-1]    // Store to cell[ptr-1] (left)
-    |  mov w0, #0             // Clear temp register
-    |  strb w0, [x19]         // Clear current cell[ptr]
+// ARM64-specific copy cell optimization for [-MOVE+MOVE_BACK] patterns
+static void compile_bf_copy_cell(dasm_State **Dst, int offset) {
+    |  ldrb w0, [x19]                    // Load from source cell
+    if (offset >= -256 && offset <= 255) {
+        |  ldrb w1, [x19, #offset]       // Load current destination value
+        |  add w0, w0, w1                // Add source to destination
+        |  strb w0, [x19, #offset]       // Store to destination cell at offset
+    } else {
+        |  add x19, x19, #offset         // Add offset to pointer
+        |  ldrb w1, [x19]                // Load current destination value
+        |  add w0, w0, w1                // Add source to destination
+        |  strb w0, [x19]                // Store to destination cell
+        |  sub x19, x19, #offset         // Restore pointer
+    }
+    |  mov w0, #0                        // Clear temp register
+    |  strb w0, [x19]                    // Clear source cell
 }
 
 // ARM64-specific multiplication optimization for n*m patterns

@@ -88,12 +88,18 @@ static void compile_bf_arch_optimized(dasm_State **Dst, char instruction, int co
 }
 
 
-// AMD64-specific copy current-to-left optimization for [-<+>] pattern
-static void compile_bf_copy_current_to_left(dasm_State **Dst) {
-    |  mov rax, [rsp+8]      // Load memory pointer
-    |  mov dl, [rax]         // Load from cell[ptr] (current)
-    |  mov [rax-1], dl       // Store to cell[ptr-1] (left)
-    |  mov byte [rax], 0     // Clear current cell[ptr]
+// AMD64-specific copy cell optimization for [-MOVE+MOVE_BACK] patterns
+static void compile_bf_copy_cell(dasm_State **Dst, int offset) {
+    |  mov rax, [rsp+8]              // Load memory pointer
+    |  mov dl, [rax]                 // Load from source cell
+    if (offset >= -128 && offset <= 127) {
+        |  add [rax+offset], dl      // Add to destination cell at offset
+    } else {
+        |  add rax, offset           // Add offset to pointer
+        |  add [rax], dl             // Add to destination cell
+    }
+    |  mov rax, [rsp+8]              // Reload memory pointer  
+    |  mov byte [rax], 0             // Clear source cell
 }
 
 // AMD64-specific multiplication optimization for n*m patterns
