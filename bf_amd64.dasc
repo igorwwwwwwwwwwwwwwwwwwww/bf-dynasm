@@ -170,3 +170,27 @@ static void compile_bf_add_val(dasm_State **Dst, int count) {
 static void compile_bf_input(dasm_State **Dst) {
     compile_bf_arch(Dst, ',');
 }
+
+// AMD64-specific add value at offset optimization
+static void compile_bf_add_val_at_offset(dasm_State **Dst, int value, int offset) {
+    |  mov rax, [rsp+8]              // Load memory pointer
+    if (value > 0) {
+        if (value == 1 && offset >= -128 && offset <= 127) {
+            |  inc byte [rax+offset]     // Increment at offset
+        } else if (value <= 127 && offset >= -128 && offset <= 127) {
+            |  add byte [rax+offset], value  // Add value at offset
+        } else {
+            |  add rax, offset           // Add offset to pointer
+            |  add byte [rax], value     // Add value at adjusted pointer
+        }
+    } else if (value < 0) {
+        if (value == -1 && offset >= -128 && offset <= 127) {
+            |  dec byte [rax+offset]     // Decrement at offset
+        } else if (value >= -127 && offset >= -128 && offset <= 127) {
+            |  sub byte [rax+offset], (-value)  // Subtract value at offset
+        } else {
+            |  add rax, offset           // Add offset to pointer
+            |  sub byte [rax], (-value)  // Subtract value at adjusted pointer
+        }
+    }
+}

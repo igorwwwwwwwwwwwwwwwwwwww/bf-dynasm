@@ -114,6 +114,9 @@ static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label
         case AST_SET_CONST:
             assert(0); // Not implemented
             break;
+        case AST_ADD_VAL_AT_OFFSET:
+            compile_bf_add_val_at_offset(Dst, node->data.add_at_offset.value, node->data.add_at_offset.offset);
+            break;
     }
 
     // Continue with next node

@@ -16,6 +16,7 @@ typedef enum {
     AST_COPY_CELL,      // Optimized [-<+>] (copy current to left)
     AST_MUL_CONST,      // Optimized ++++[>+++<-]
     AST_SET_CONST,      // Direct constant assignment
+    AST_ADD_VAL_AT_OFFSET, // Optimized >ADD<, ADD at offset without moving pointer
 } ast_node_type_t;
 
 typedef struct ast_node {
@@ -37,6 +38,10 @@ typedef struct ast_node {
             int value;
         } set_const;
         struct {
+            int value;
+            int offset;
+        } add_at_offset;
+        struct {
             struct ast_node *body;  // For AST_LOOP only
         } loop;
     } data;
@@ -57,6 +62,7 @@ ast_node_t* ast_create_clear_cell(void);
 ast_node_t* ast_create_copy_cell(int src_offset, int dst_offset);
 ast_node_t* ast_create_mul_const(int multiplier, int src_offset, int dst_offset);
 ast_node_t* ast_create_set_const(int value);
+ast_node_t* ast_create_add_at_offset(int value, int offset);
 
 // AST manipulation
 void ast_free(ast_node_t *node);

@@ -77,6 +77,13 @@ ast_node_t* ast_create_set_const(int value) {
     return node;
 }
 
+ast_node_t* ast_create_add_at_offset(int value, int offset) {
+    ast_node_t *node = ast_create_node(AST_ADD_VAL_AT_OFFSET);
+    node->data.add_at_offset.value = value;
+    node->data.add_at_offset.offset = offset;
+    return node;
+}
+
 // Memory management
 void ast_free(ast_node_t *node) {
     if (!node) return;
@@ -100,6 +107,7 @@ static const char* ast_type_name(ast_node_type_t type) {
         case AST_COPY_CELL: return "COPY_CELL";
         case AST_MUL_CONST: return "MUL_CONST";
         case AST_SET_CONST: return "SET_CONST";
+        case AST_ADD_VAL_AT_OFFSET: return "ADD_VAL_AT_OFFSET";
         default: return "UNKNOWN";
     }
 }
@@ -128,6 +136,11 @@ void ast_print(ast_node_t *node, int indent) {
             break;
         case AST_SET_CONST:
             fprintf(stderr, " (value: %d)", node->data.set_const.value);
+            break;
+        case AST_ADD_VAL_AT_OFFSET:
+            fprintf(stderr, " (value: %d, offset: %d)", 
+                   node->data.add_at_offset.value, 
+                   node->data.add_at_offset.offset);
             break;
         default:
             break;
@@ -246,6 +259,32 @@ ast_node_t* ast_optimize(ast_node_t *node) {
         // Free the loop
         ast_free(loop->data.loop.body);
         free(loop);
+    }
+    
+    // Offset ADD optimization: detect MOVE_PTR + ADD_VAL + MOVE_PTR patterns
+    if (node->type == AST_MOVE_PTR && node->next && 
+        node->next->type == AST_ADD_VAL && node->next->next &&
+        node->next->next->type == AST_MOVE_PTR && 
+        node->next->next->data.basic.count == -node->data.basic.count) {
+        
+        int offset = node->data.basic.count;
+        int value = node->next->data.basic.count;
+        ast_node_t *third = node->next->next;
+        
+        // Create ADD_VAL_AT_OFFSET node
+        ast_node_t *offset_add = ast_create_add_at_offset(value, offset);
+        offset_add->next = third->next;
+        
+        // Free the three nodes we're replacing
+        free(node->next);
+        free(third);
+        
+        // Replace current node
+        *node = *offset_add;
+        free(offset_add);
+        
+        // Continue optimizing from current node
+        return ast_optimize(node);
     }
     
     return node;
