@@ -5,11 +5,10 @@ A high-performance Brainfuck interpreter with Just-In-Time compilation using Dyn
 ## Features
 
 - **JIT Compilation**: Compiles Brainfuck source to native machine code at runtime
-- **Multi-Architecture**: Supports both ARM64 and x64 architectures  
-- **Multi-Platform Docker**: Automatic architecture detection and cross-platform builds
-- **Debug Mode**: Dumps compiled machine code in hex format for analysis
-- **High Performance**: Direct native code execution with optimized calling conventions
-- **Cross-Platform**: Works on macOS (ARM64/Intel) and Linux (ARM64/x64)
+- **AST Optimizations**: Advanced optimizations including multiplication loops, offset operations, and constant propagation
+- **Multi-Architecture**: Supports both ARM64 and x64 architectures
+- **Debug Mode**: Dumps AST and compiled machine code for analysis
+- **High Performance**: Direct native code execution with minimal overhead
 
 ## Building
 
@@ -40,40 +39,45 @@ make clean
 ## Usage
 
 ```bash
-# Run Brainfuck program (native architecture)
+# Run Brainfuck program
 ./bf examples/hello.bf
 
-# Run with debug mode (dumps machine code)
-./bf -d examples/hello.bf
+# Run with debug mode (dumps AST and machine code)
+./bf --debug examples/fizzbuzz.bf
 
-# AMD64 version (via Rosetta on ARM64 Macs)
-arch -x86_64 ./bf_amd64_darwin examples/hello.bf
+# Run without optimizations
+./bf --no-optimize examples/hello.bf
+
+# Show help
+./bf --help
 ```
+
+## Optimizations
+
+The compiler includes several AST-level optimizations:
+
+- **Run-length encoding**: Consecutive `+`, `-`, `>`, `<` operations are combined
+- **Loop optimizations**: `[-]` becomes direct cell clearing, `[-<+>]` becomes copy operations
+- **Multiplication loops**: Patterns like `++++[>+++<-]` become single multiplication operations
+- **Offset operations**: `>+<` sequences become direct offset additions without pointer movement
+- **Constant propagation**: `[-]+++` becomes direct constant assignment
 
 ## Architecture Support
 
 ### ARM64 (Apple Silicon, ARM64 Linux)
-- Native execution on ARM64 systems
-- Optimized ARM64 assembly with proper calling conventions
-- Uses ARM64 registers: x19 for memory pointer, standard AAPCS64 ABI
-- Function calls use register-indirect calls with 4-instruction 64-bit address loading:
-  ```asm
-  mov  x16, #immediate_low_16_bits
-  movk x16, #immediate_next_16_bits, lsl #16
-  movk x16, #immediate_next_16_bits, lsl #32  
-  movk x16, #immediate_high_16_bits, lsl #48
-  blr  x16
-  ```
+- Native execution with AAPCS64 ABI compliance
+- Uses x19 register for memory pointer
+- Register-indirect function calls with 64-bit address loading
 
 ### x64 (Intel/AMD 64-bit)
-- Cross-compiled x64 machine code generation
 - System V AMD64 ABI compliance
-- Uses register-indirect calls with 64-bit immediate loading:
-  ```asm
-  mov rax, function_address    ; 64-bit immediate
-  call rax                     ; Register-indirect call
-  ```
-- Memory pointer stored on stack for proper alignment
+- Stack-based memory pointer for alignment
+- Register-indirect function calls
+
+```bash
+# AMD64 version (via Rosetta on ARM64 Macs)
+arch -x86_64 ./bf_amd64_darwin examples/hello.bf
+```
 
 ## Testing
 
@@ -106,19 +110,11 @@ docker run --rm dynasm-bf
 
 ```bash
 # Test with custom Brainfuck code
-docker run --rm dynasm-bf sh -c 'echo "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++." > test.bf && ./bf_interpreter test.bf'
+docker run --rm dynasm-bf sh -c 'echo "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++." > test.bf && ./bf test.bf'
 
 # Run with debug mode to see compiled machine code
-docker run --rm dynasm-bf ./bf_interpreter -d examples/hello.bf
+docker run --rm dynasm-bf ./bf --debug examples/hello.bf
 ```
-
-### Docker Architecture Details
-
-The Dockerfile automatically:
-- Detects the target architecture (`x86_64` or `aarch64`)
-- Uses system LuaJIT package for reliable builds
-- Compiles with automatic architecture detection via C preprocessor macros
-- Tests the built interpreter with the Hello World example
 
 ### Cross-Platform Testing
 
@@ -134,16 +130,6 @@ docker run --platform=linux/arm64 dynasm-bf
 
 # Both should output: "Hello World!"
 ```
-
-## Examples
-
-The `examples/` directory contains various Brainfuck programs:
-
-- `hello.bf` - Hello World program
-- `hello2.bf` - Alternative Hello World with nested loops  
-- `hello3.bf` - Complex Hello World variant
-- `count.bf` - Simple counting program
-- `simple_loop.bf` - Basic loop test
 
 ## Implementation Details
 
@@ -164,9 +150,9 @@ The `examples/` directory contains various Brainfuck programs:
 - Minimal function call overhead for I/O operations
 
 ### Debug Mode
+- AST dump showing optimization transformations
 - Hex dump of compiled machine code
 - Architecture identification
-- Memory layout analysis
 
 
 ## Performance
@@ -175,52 +161,10 @@ This JIT compiler provides significant performance improvements over traditional
 
 - **Native Speed**: Compiled code runs at native processor speed
 - **No Interpretation Overhead**: Direct machine code execution
-- **Optimized Loops**: Native conditional branches instead of interpretation
+- **AST Optimizations**: Advanced optimizations reduce instruction count significantly
+- **Optimized Loops**: Native conditional branches with specialized loop patterns
 - **Efficient I/O**: Direct function calls with proper ABI compliance
-
-## Troubleshooting
-
-### Docker Issues
-
-**Building for different architecture fails:**
-```bash
-# Make sure Docker Buildx is enabled
-docker buildx create --use
-
-# Check available platforms
-docker buildx ls
-```
-
-**"cannot create state: not enough memory" error:**
-- This was an issue with system LuaJIT packages
-- The Dockerfile now builds LuaJIT from source to avoid this
-
-**ARM64 segmentation fault in Docker:**
-- Fixed in current version using proper register-indirect calls
-- If you see this, make sure you're using the latest Dockerfile
-
-### Build Issues
-
-**"luajit: command not found":**
-```bash
-# The Makefile will auto-download LuaJIT
-make  # This will clone LuaJIT automatically
-```
-
-**DynASM preprocessing errors:**
-```bash
-# Clean and rebuild
-make clean
-make
-```
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Test on both ARM64 and x64 (using Docker)
-4. Submit a pull request
 
 ## License
 
-MIT License - see LICENSE file for details
+MIT

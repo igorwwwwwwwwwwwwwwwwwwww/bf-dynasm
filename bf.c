@@ -176,6 +176,7 @@ static bf_func compile_bf_ast(ast_node_t *ast, int debug_mode) {
 int main(int argc, char *argv[]) {
     int debug_mode = 0;
     int optimize = 1;
+    int show_help = 0;
     int arg_offset = 1;
 
     // Parse flags
@@ -186,17 +187,28 @@ int main(int argc, char *argv[]) {
         } else if (strcmp(argv[i], "--no-optimize") == 0) {
             optimize = 0;
             arg_offset++;
+        } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
+            show_help = 1;
+            arg_offset++;
+            break;
         } else {
             fprintf(stderr, "Unknown flag: %s\n", argv[i]);
             return 1;
         }
     }
 
-    if (argc < arg_offset + 1) {
-        fprintf(stderr, "Usage: %s [options] <brainfuck_file>\n", argv[0]);
-        fprintf(stderr, "  --debug: Enable debug mode (dump compiled code)\n");
-        fprintf(stderr, "  --no-optimize: Disable optimizations\n");
-        return 1;
+    if (show_help || argc < arg_offset + 1) {
+        FILE *stream = show_help ? stdout : stderr;
+        fprintf(stream, "Usage: %s [options] <brainfuck_file>\n", argv[0]);
+        fprintf(stream, "\nOptions:\n");
+        fprintf(stream, "  --help, -h        Show this help message\n");
+        fprintf(stream, "  --debug           Enable debug mode (dump AST and compiled code)\n");
+        fprintf(stream, "  --no-optimize     Disable AST optimizations\n");
+        fprintf(stream, "\nExamples:\n");
+        fprintf(stream, "  %s examples/hello.bf\n", argv[0]);
+        fprintf(stream, "  %s --debug examples/fizzbuzz.bf\n", argv[0]);
+        fprintf(stream, "  %s --no-optimize examples/mandel.bf\n", argv[0]);
+        return show_help ? 0 : 1;
     }
 
     size_t program_size;
