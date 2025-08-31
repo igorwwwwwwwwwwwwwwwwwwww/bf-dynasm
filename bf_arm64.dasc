@@ -126,6 +126,31 @@ static void compile_bf_copy_current_to_left(dasm_State **Dst) {
     |  strb w0, [x19]         // Clear current cell[ptr]
 }
 
+// ARM64-specific multiplication optimization for n*m patterns
+static void compile_bf_mul_const(dasm_State **Dst, int multiplier, int target_offset) {
+    // Multiply current cell by multiplier, add to target cell
+    // Semantics: target += source * multiplier; source = 0
+    |  ldrb w0, [x19]                    // Load source value
+    |  mov w1, #multiplier               // Load multiplier  
+    |  mul w0, w0, w1                    // source * multiplier
+    if (target_offset == 1) {
+        |  ldrb w1, [x19, #1]            // Load current target value
+        |  add w0, w0, w1                // Add to existing target value
+        |  strb w0, [x19, #1]            // Store to target (common case)
+    } else if (target_offset <= 255) {
+        |  ldrb w1, [x19, #target_offset] // Load current target value
+        |  add w0, w0, w1                // Add to existing target value
+        |  strb w0, [x19, #target_offset] // Store to target
+    } else {
+        |  mov x16, #target_offset       // Large offset
+        |  ldrb w1, [x19, x16]           // Load current target value
+        |  add w0, w0, w1                // Add to existing target value
+        |  strb w0, [x19, x16]           // Store to target
+    }
+    |  mov w0, #0                        // Clear temp
+    |  strb w0, [x19]                    // Clear source cell
+}
+
 static void compile_bf_prologue(dasm_State **Dst) {
     |  stp x29, x30, [sp, #-32]!
     |  mov x29, sp

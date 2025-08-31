@@ -10,7 +10,6 @@ typedef enum {
     AST_OUTPUT,         // .
     AST_INPUT,          // ,
     AST_LOOP,           // [...]
-    AST_SEQUENCE,       // Multiple statements
     
     // Optimized high-level operations
     AST_CLEAR_CELL,     // Optimized [-]
@@ -21,9 +20,26 @@ typedef enum {
 
 typedef struct ast_node {
     ast_node_type_t type;
-    int value;                    // Count for moves/adds, constant for SET_CONST
-    int offset;                   // Memory offset for operations
-    struct ast_node *body;        // For loops and sequences
+    union {
+        struct {
+            int count;            // For MOVE_PTR, ADD_VAL
+        } basic;
+        struct {
+            int multiplier;
+            int src_offset;
+            int dst_offset;
+        } mul_const;
+        struct {
+            int src_offset;
+            int dst_offset;
+        } copy;
+        struct {
+            int value;
+        } set_const;
+        struct {
+            struct ast_node *body;  // For AST_LOOP only
+        } loop;
+    } data;
     struct ast_node *next;        // Next sibling in sequence
     int line, column;             // Source location for debugging
 } ast_node_t;

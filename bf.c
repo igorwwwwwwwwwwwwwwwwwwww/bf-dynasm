@@ -73,11 +73,11 @@ static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label
 
     switch (node->type) {
         case AST_MOVE_PTR:
-            compile_bf_move_ptr(Dst, node->value);
+            compile_bf_move_ptr(Dst, node->data.basic.count);
             break;
 
         case AST_ADD_VAL:
-            compile_bf_add_val(Dst, node->value);
+            compile_bf_add_val(Dst, node->data.basic.count);
             break;
 
         case AST_OUTPUT:
@@ -93,7 +93,7 @@ static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label
             int end_label = next_label++;
             compile_bf_loop_start(Dst, end_label);
             compile_bf_label(Dst, start_label);
-            next_label = ast_compile_direct(node->body, Dst, next_label);
+            next_label = ast_compile_direct(node->data.loop.body, Dst, next_label);
             compile_bf_loop_end(Dst, start_label);
             compile_bf_label(Dst, end_label);
             break;
@@ -104,14 +104,13 @@ static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label
             break;
 
         case AST_COPY_CELL:
-            assert(node->value == -1); // Only [-<+>] pattern is currently supported
+            assert(node->data.copy.dst_offset == -1); // Only [-<+>] pattern is currently supported
             compile_bf_copy_current_to_left(Dst);
             break;
 
-        case AST_SEQUENCE:
-            assert(0); // Should be flattened during parsing
-            break;
         case AST_MUL_CONST:
+            compile_bf_mul_const(Dst, node->data.mul_const.multiplier, node->data.mul_const.dst_offset);
+            break;
         case AST_SET_CONST:
             assert(0); // Not implemented
             break;

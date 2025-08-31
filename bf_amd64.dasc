@@ -101,6 +101,25 @@ static void compile_bf_copy_current_to_left(dasm_State **Dst) {
     |  mov byte [rax], 0     // Clear current cell[ptr]
 }
 
+// AMD64-specific multiplication optimization for n*m patterns
+static void compile_bf_mul_const(dasm_State **Dst, int multiplier, int target_offset) {
+    // Multiply current cell by multiplier, add to target cell
+    // Semantics: target += source * multiplier; source = 0
+    |  mov rax, [rsp+8]              // Load memory pointer
+    |  movzx ecx, byte [rax]         // Load source value (zero-extend to 32-bit)
+    |  imul ecx, multiplier          // Multiply by constant
+    if (target_offset == 1) {
+        |  add [rax+1], cl           // Add to target (common case)
+    } else if (target_offset <= 127) {
+        |  add [rax+target_offset], cl  // Add to target
+    } else {
+        |  add rax, target_offset    // Large offset
+        |  add [rax], cl             // Add to target
+    }
+    |  mov rax, [rsp+8]              // Reload memory pointer
+    |  mov byte [rax], 0             // Clear source cell
+}
+
 static void compile_bf_prologue(dasm_State **Dst) {
     |  push rbp
     |  mov rbp, rsp
