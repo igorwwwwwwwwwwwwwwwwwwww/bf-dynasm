@@ -192,8 +192,36 @@ static void compile_bf_add_val(dasm_State **Dst, int count, int offset) {
     }
 }
 
-static void compile_bf_input(dasm_State **Dst) {
-    compile_bf_arch(Dst, ',');
+static void compile_bf_input(dasm_State **Dst, int offset) {
+    if (offset == 0) {
+        compile_bf_arch(Dst, ',');
+    } else {
+        |  mov64 rax, (uintptr_t)getchar_wrapper   // Load function pointer
+        |  call rax                               // Call through register
+        |  mov rdx, [rsp+8]                       // Load memory pointer from stack
+        if (offset >= -128 && offset <= 127) {
+            |  mov [rdx+offset], al               // Store result at offset
+        } else {
+            |  add rdx, offset                    // Add offset to pointer
+            |  mov [rdx], al                      // Store result at adjusted pointer
+        }
+    }
+}
+
+static void compile_bf_output(dasm_State **Dst, int offset) {
+    if (offset == 0) {
+        compile_bf_arch(Dst, '.');
+    } else {
+        |  mov rax, [rsp+8]                       // Load memory pointer from stack
+        if (offset >= -128 && offset <= 127) {
+            |  movzx edi, byte [rax+offset]       // Load byte from offset and put in first argument register
+        } else {
+            |  add rax, offset                    // Add offset to pointer
+            |  movzx edi, byte [rax]              // Load byte and put in first argument register
+        }
+        |  mov64 rax, (uintptr_t)putchar_wrapper  // Load function pointer into rax
+        |  call rax                               // Call through register
+    }
 }
 
 // AMD64-specific set constant optimization

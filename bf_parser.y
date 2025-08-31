@@ -69,8 +69,8 @@ statement:
     | MOVE_LEFT             { $$ = ast_create_move(-1); }
     | INC_VAL               { $$ = ast_create_add(1, 0); }
     | DEC_VAL               { $$ = ast_create_add(-1, 0); }
-    | OUTPUT                { $$ = ast_create_output(); }
-    | INPUT                 { $$ = ast_create_input(); }
+    | OUTPUT                { $$ = ast_create_output(0); }
+    | INPUT                 { $$ = ast_create_input(0); }
     | loop                  { $$ = $1; }
     ;
 

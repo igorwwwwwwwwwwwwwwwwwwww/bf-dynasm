@@ -81,11 +81,11 @@ static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label
             break;
 
         case AST_OUTPUT:
-            compile_bf_arch(Dst, '.');
+            compile_bf_output(Dst, node->data.basic.offset);
             break;
 
         case AST_INPUT:
-            compile_bf_input(Dst);
+            compile_bf_input(Dst, node->data.basic.offset);
             break;
 
         case AST_LOOP: {

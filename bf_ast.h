@@ -22,7 +22,7 @@ typedef struct ast_node {
     union {
         struct {
             int count;            // For MOVE_PTR, ADD_VAL value
-            int offset;           // For ADD_VAL only (default 0 for current position)
+            int offset;           // For ADD_VAL, INPUT, OUTPUT (default 0 for current position)
         } basic;
         struct {
             int multiplier;
@@ -47,8 +47,8 @@ typedef struct ast_node {
 // AST construction functions
 ast_node_t* ast_create_move(int count);
 ast_node_t* ast_create_add(int count, int offset); 
-ast_node_t* ast_create_output(void);
-ast_node_t* ast_create_input(void);
+ast_node_t* ast_create_output(int offset);
+ast_node_t* ast_create_input(int offset);
 ast_node_t* ast_create_loop(ast_node_t *body);
 ast_node_t* ast_create_sequence(ast_node_t *first, ast_node_t *second);
 

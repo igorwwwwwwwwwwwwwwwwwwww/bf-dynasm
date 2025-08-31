@@ -25,12 +25,16 @@ ast_node_t* ast_create_add(int count, int offset) {
     return node;
 }
 
-ast_node_t* ast_create_output(void) {
-    return ast_create_node(AST_OUTPUT);
+ast_node_t* ast_create_output(int offset) {
+    ast_node_t *node = ast_create_node(AST_OUTPUT);
+    node->data.basic.offset = offset;
+    return node;
 }
 
-ast_node_t* ast_create_input(void) {
-    return ast_create_node(AST_INPUT);
+ast_node_t* ast_create_input(int offset) {
+    ast_node_t *node = ast_create_node(AST_INPUT);
+    node->data.basic.offset = offset;
+    return node;
 }
 
 ast_node_t* ast_create_loop(ast_node_t *body) {
@@ -132,6 +136,12 @@ void ast_print(ast_node_t *node, int indent) {
             break;
         case AST_SET_CONST:
             fprintf(stderr, " (value: %d)", node->data.set_const.value);
+            break;
+        case AST_INPUT:
+        case AST_OUTPUT:
+            if (node->data.basic.offset != 0) {
+                fprintf(stderr, " (offset: %d)", node->data.basic.offset);
+            }
             break;
         default:
             break;
