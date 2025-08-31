@@ -77,7 +77,7 @@ static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label
             break;
 
         case AST_ADD_VAL:
-            compile_bf_add_val(Dst, node->data.basic.count);
+            compile_bf_add_val(Dst, node->data.basic.count, node->data.basic.offset);
             break;
 
         case AST_OUTPUT:
@@ -109,9 +109,6 @@ static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label
             break;
         case AST_SET_CONST:
             compile_bf_set_const(Dst, node->data.set_const.value);
-            break;
-        case AST_ADD_VAL_AT_OFFSET:
-            compile_bf_add_val_at_offset(Dst, node->data.add_at_offset.value, node->data.add_at_offset.offset);
             break;
     }
 

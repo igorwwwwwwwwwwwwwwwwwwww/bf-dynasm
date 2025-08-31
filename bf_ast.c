@@ -18,9 +18,10 @@ ast_node_t* ast_create_move(int count) {
     return node;
 }
 
-ast_node_t* ast_create_add(int count) {
+ast_node_t* ast_create_add(int count, int offset) {
     ast_node_t *node = ast_create_node(AST_ADD_VAL);
     node->data.basic.count = count;
+    node->data.basic.offset = offset;
     return node;
 }
 
@@ -74,12 +75,6 @@ ast_node_t* ast_create_set_const(int value) {
     return node;
 }
 
-ast_node_t* ast_create_add_at_offset(int value, int offset) {
-    ast_node_t *node = ast_create_node(AST_ADD_VAL_AT_OFFSET);
-    node->data.add_at_offset.value = value;
-    node->data.add_at_offset.offset = offset;
-    return node;
-}
 
 // Memory management
 void ast_free(ast_node_t *node) {
@@ -103,7 +98,6 @@ static const char* ast_type_name(ast_node_type_t type) {
         case AST_COPY_CELL: return "COPY_CELL";
         case AST_MUL_CONST: return "MUL_CONST";
         case AST_SET_CONST: return "SET_CONST";
-        case AST_ADD_VAL_AT_OFFSET: return "ADD_VAL_AT_OFFSET";
         default: return "UNKNOWN";
     }
 }
@@ -116,8 +110,14 @@ void ast_print(ast_node_t *node, int indent) {
     fprintf(stderr, "%s", ast_type_name(node->type));
     switch (node->type) {
         case AST_MOVE_PTR:
-        case AST_ADD_VAL:
             if (node->data.basic.count != 0) fprintf(stderr, " (count: %d)", node->data.basic.count);
+            break;
+        case AST_ADD_VAL:
+            if (node->data.basic.offset != 0) {
+                fprintf(stderr, " (count: %d, offset: %d)", node->data.basic.count, node->data.basic.offset);
+            } else {
+                fprintf(stderr, " (count: %d)", node->data.basic.count);
+            }
             break;
         case AST_MUL_CONST:
             fprintf(stderr, " (mult: %d, src: %d, dst: %d)", 
@@ -132,11 +132,6 @@ void ast_print(ast_node_t *node, int indent) {
             break;
         case AST_SET_CONST:
             fprintf(stderr, " (value: %d)", node->data.set_const.value);
-            break;
-        case AST_ADD_VAL_AT_OFFSET:
-            fprintf(stderr, " (value: %d, offset: %d)", 
-                   node->data.add_at_offset.value, 
-                   node->data.add_at_offset.offset);
             break;
         default:
             break;
@@ -188,8 +183,18 @@ ast_node_t* ast_optimize(ast_node_t *node) {
     
     // Run-length encoding: combine consecutive ADD_VAL or MOVE_PTR operations FIRST
     if (node->next && node->type == node->next->type) {
-        if (node->type == AST_ADD_VAL || node->type == AST_MOVE_PTR) {
-            // Combine with next node
+        if (node->type == AST_MOVE_PTR) {
+            // MOVE_PTR operations can always be combined
+            node->data.basic.count += node->next->data.basic.count;
+            ast_node_t *old_next = node->next;
+            node->next = node->next->next;
+            free(old_next);
+            
+            // Continue optimizing from current node (might combine further)
+            return ast_optimize(node);
+        } else if (node->type == AST_ADD_VAL && 
+                   node->data.basic.offset == node->next->data.basic.offset) {
+            // ADD_VAL operations can only be combined if they have the same offset
             node->data.basic.count += node->next->data.basic.count;
             ast_node_t *old_next = node->next;
             node->next = node->next->next;
@@ -308,8 +313,8 @@ ast_node_t* ast_optimize(ast_node_t *node) {
         int value = node->next->data.basic.count;
         ast_node_t *third = node->next->next;
         
-        // Create ADD_VAL_AT_OFFSET node
-        ast_node_t *offset_add = ast_create_add_at_offset(value, offset);
+        // Create ADD_VAL node with offset
+        ast_node_t *offset_add = ast_create_add(value, offset);
         offset_add->next = third->next;
         
         // Free the three nodes we're replacing

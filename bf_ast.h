@@ -6,7 +6,7 @@
 
 typedef enum {
     AST_MOVE_PTR,       // > or < (with count for run-length)
-    AST_ADD_VAL,        // + or - (with count for run-length)
+    AST_ADD_VAL,        // + or - (with count for run-length, optional offset)
     AST_OUTPUT,         // .
     AST_INPUT,          // ,
     AST_LOOP,           // [...]
@@ -15,14 +15,14 @@ typedef enum {
     AST_COPY_CELL,      // Optimized [-<+>] (copy current to left)
     AST_MUL_CONST,      // Optimized ++++[>+++<-]
     AST_SET_CONST,      // Direct constant assignment (includes clear cell as SET_CONST(0))
-    AST_ADD_VAL_AT_OFFSET, // Optimized >ADD<, ADD at offset without moving pointer
 } ast_node_type_t;
 
 typedef struct ast_node {
     ast_node_type_t type;
     union {
         struct {
-            int count;            // For MOVE_PTR, ADD_VAL
+            int count;            // For MOVE_PTR, ADD_VAL value
+            int offset;           // For ADD_VAL only (default 0 for current position)
         } basic;
         struct {
             int multiplier;
@@ -37,10 +37,6 @@ typedef struct ast_node {
             int value;
         } set_const;
         struct {
-            int value;
-            int offset;
-        } add_at_offset;
-        struct {
             struct ast_node *body;  // For AST_LOOP only
         } loop;
     } data;
@@ -50,7 +46,7 @@ typedef struct ast_node {
 
 // AST construction functions
 ast_node_t* ast_create_move(int count);
-ast_node_t* ast_create_add(int count); 
+ast_node_t* ast_create_add(int count, int offset); 
 ast_node_t* ast_create_output(void);
 ast_node_t* ast_create_input(void);
 ast_node_t* ast_create_loop(ast_node_t *body);
@@ -60,7 +56,6 @@ ast_node_t* ast_create_sequence(ast_node_t *first, ast_node_t *second);
 ast_node_t* ast_create_copy_cell(int src_offset, int dst_offset);
 ast_node_t* ast_create_mul_const(int multiplier, int src_offset, int dst_offset);
 ast_node_t* ast_create_set_const(int value);
-ast_node_t* ast_create_add_at_offset(int value, int offset);
 
 // AST manipulation
 void ast_free(ast_node_t *node);

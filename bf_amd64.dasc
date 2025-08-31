@@ -159,11 +159,36 @@ static void compile_bf_move_ptr(dasm_State **Dst, int count) {
     }
 }
 
-static void compile_bf_add_val(dasm_State **Dst, int count) {
-    if (count > 0) {
-        compile_bf_arch_optimized(Dst, '+', count);
-    } else if (count < 0) {
-        compile_bf_arch_optimized(Dst, '-', -count);
+static void compile_bf_add_val(dasm_State **Dst, int count, int offset) {
+    if (offset == 0) {
+        // Normal ADD at current position
+        if (count > 0) {
+            compile_bf_arch_optimized(Dst, '+', count);
+        } else if (count < 0) {
+            compile_bf_arch_optimized(Dst, '-', -count);
+        }
+    } else {
+        // ADD at offset
+        |  mov rax, [rsp+8]              // Load memory pointer
+        if (count > 0) {
+            if (count == 1 && offset >= -128 && offset <= 127) {
+                |  inc byte [rax+offset]     // Increment at offset
+            } else if (count <= 127 && offset >= -128 && offset <= 127) {
+                |  add byte [rax+offset], count  // Add value at offset
+            } else {
+                |  add rax, offset           // Add offset to pointer
+                |  add byte [rax], count     // Add value at adjusted pointer
+            }
+        } else if (count < 0) {
+            if (count == -1 && offset >= -128 && offset <= 127) {
+                |  dec byte [rax+offset]     // Decrement at offset
+            } else if (count >= -127 && offset >= -128 && offset <= 127) {
+                |  sub byte [rax+offset], -count  // Subtract value at offset
+            } else {
+                |  add rax, offset           // Add offset to pointer
+                |  sub byte [rax], -count    // Subtract value at adjusted pointer
+            }
+        }
     }
 }
 
@@ -183,26 +208,3 @@ static void compile_bf_set_const(dasm_State **Dst, int value) {
     }
 }
 
-// AMD64-specific add value at offset optimization
-static void compile_bf_add_val_at_offset(dasm_State **Dst, int value, int offset) {
-    |  mov rax, [rsp+8]              // Load memory pointer
-    if (value > 0) {
-        if (value == 1 && offset >= -128 && offset <= 127) {
-            |  inc byte [rax+offset]     // Increment at offset
-        } else if (value <= 127 && offset >= -128 && offset <= 127) {
-            |  add byte [rax+offset], value  // Add value at offset
-        } else {
-            |  add rax, offset           // Add offset to pointer
-            |  add byte [rax], value     // Add value at adjusted pointer
-        }
-    } else if (value < 0) {
-        if (value == -1 && offset >= -128 && offset <= 127) {
-            |  dec byte [rax+offset]     // Decrement at offset
-        } else if (value >= -127 && offset >= -128 && offset <= 127) {
-            |  sub byte [rax+offset], (-value)  // Subtract value at offset
-        } else {
-            |  add rax, offset           // Add offset to pointer
-            |  sub byte [rax], (-value)  // Subtract value at adjusted pointer
-        }
-    }
-}

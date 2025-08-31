@@ -192,11 +192,49 @@ static void compile_bf_move_ptr(dasm_State **Dst, int count) {
     }
 }
 
-static void compile_bf_add_val(dasm_State **Dst, int count) {
-    if (count > 0) {
-        compile_bf_arch_optimized(Dst, '+', count);
-    } else if (count < 0) {
-        compile_bf_arch_optimized(Dst, '-', -count);
+static void compile_bf_add_val(dasm_State **Dst, int count, int offset) {
+    if (offset == 0) {
+        // Normal ADD at current position
+        if (count > 0) {
+            compile_bf_arch_optimized(Dst, '+', count);
+        } else if (count < 0) {
+            compile_bf_arch_optimized(Dst, '-', -count);
+        }
+    } else {
+        // ADD at offset
+        if (count > 0) {
+            if (count == 1 && offset >= -256 && offset <= 255) {
+                |  ldrb w0, [x19, #offset]       // Load from offset
+                |  add w0, w0, #1                // Increment
+                |  strb w0, [x19, #offset]       // Store back at offset
+            } else if (count <= 255 && offset >= -256 && offset <= 255) {
+                |  ldrb w0, [x19, #offset]       // Load from offset
+                |  add w0, w0, #count            // Add value
+                |  strb w0, [x19, #offset]       // Store back at offset
+            } else {
+                |  add x19, x19, #offset         // Add offset to pointer
+                |  ldrb w0, [x19]                // Load from adjusted pointer
+                |  add w0, w0, #count            // Add value
+                |  strb w0, [x19]                // Store back
+                |  sub x19, x19, #offset         // Restore pointer
+            }
+        } else if (count < 0) {
+            if (count == -1 && offset >= -256 && offset <= 255) {
+                |  ldrb w0, [x19, #offset]       // Load from offset
+                |  sub w0, w0, #1                // Decrement
+                |  strb w0, [x19, #offset]       // Store back at offset
+            } else if (count >= -255 && offset >= -256 && offset <= 255) {
+                |  ldrb w0, [x19, #offset]       // Load from offset
+                |  sub w0, w0, #(-count)         // Subtract value
+                |  strb w0, [x19, #offset]       // Store back at offset
+            } else {
+                |  add x19, x19, #offset         // Add offset to pointer
+                |  ldrb w0, [x19]                // Load from adjusted pointer
+                |  sub w0, w0, #(-count)         // Subtract value
+                |  strb w0, [x19]                // Store back
+                |  sub x19, x19, #offset         // Restore pointer
+            }
+        }
     }
 }
 
@@ -218,39 +256,3 @@ static void compile_bf_set_const(dasm_State **Dst, int value) {
     }
 }
 
-// ARM64-specific add value at offset optimization
-static void compile_bf_add_val_at_offset(dasm_State **Dst, int value, int offset) {
-    if (value > 0) {
-        if (value == 1 && offset >= -256 && offset <= 255) {
-            |  ldrb w0, [x19, #offset]       // Load from offset
-            |  add w0, w0, #1                // Increment
-            |  strb w0, [x19, #offset]       // Store back at offset
-        } else if (value <= 255 && offset >= -256 && offset <= 255) {
-            |  ldrb w0, [x19, #offset]       // Load from offset
-            |  add w0, w0, #value            // Add value
-            |  strb w0, [x19, #offset]       // Store back at offset
-        } else {
-            |  add x19, x19, #offset         // Add offset to pointer
-            |  ldrb w0, [x19]                // Load from adjusted pointer
-            |  add w0, w0, #value            // Add value
-            |  strb w0, [x19]                // Store back
-            |  sub x19, x19, #offset         // Restore pointer
-        }
-    } else if (value < 0) {
-        if (value == -1 && offset >= -256 && offset <= 255) {
-            |  ldrb w0, [x19, #offset]       // Load from offset
-            |  sub w0, w0, #1                // Decrement
-            |  strb w0, [x19, #offset]       // Store back at offset
-        } else if (value >= -255 && offset >= -256 && offset <= 255) {
-            |  ldrb w0, [x19, #offset]       // Load from offset
-            |  sub w0, w0, #(-value)         // Subtract value
-            |  strb w0, [x19, #offset]       // Store back at offset
-        } else {
-            |  add x19, x19, #offset         // Add offset to pointer
-            |  ldrb w0, [x19]                // Load from adjusted pointer
-            |  sub w0, w0, #(-value)         // Subtract value
-            |  strb w0, [x19]                // Store back
-            |  sub x19, x19, #offset         // Restore pointer
-        }
-    }
-}

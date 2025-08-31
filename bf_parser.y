@@ -67,8 +67,8 @@ statement_list:
 statement:
     MOVE_RIGHT              { $$ = ast_create_move(1); }
     | MOVE_LEFT             { $$ = ast_create_move(-1); }
-    | INC_VAL               { $$ = ast_create_add(1); }
-    | DEC_VAL               { $$ = ast_create_add(-1); }
+    | INC_VAL               { $$ = ast_create_add(1, 0); }
+    | DEC_VAL               { $$ = ast_create_add(-1, 0); }
     | OUTPUT                { $$ = ast_create_output(); }
     | INPUT                 { $$ = ast_create_input(); }
     | loop                  { $$ = $1; }
