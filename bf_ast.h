@@ -21,8 +21,8 @@ typedef struct ast_node {
     ast_node_type_t type;
     union {
         struct {
-            int count;            // For MOVE_PTR, ADD_VAL value
-            int offset;           // For ADD_VAL, INPUT, OUTPUT (default 0 for current position)
+            int count;            // For MOVE_PTR, ADD_VAL value, SET_CONST value
+            int offset;           // For ADD_VAL, INPUT, OUTPUT, SET_CONST (default 0 for current position)
         } basic;
         struct {
             int multiplier;
@@ -33,9 +33,6 @@ typedef struct ast_node {
             int src_offset;
             int dst_offset;
         } copy;
-        struct {
-            int value;
-        } set_const;
         struct {
             struct ast_node *body;  // For AST_LOOP only
         } loop;
@@ -55,7 +52,7 @@ ast_node_t* ast_create_sequence(ast_node_t *first, ast_node_t *second);
 // Optimized AST nodes
 ast_node_t* ast_create_copy_cell(int src_offset, int dst_offset);
 ast_node_t* ast_create_mul_const(int multiplier, int src_offset, int dst_offset);
-ast_node_t* ast_create_set_const(int value);
+ast_node_t* ast_create_set_const(int value, int offset);
 
 // AST manipulation
 void ast_free(ast_node_t *node);

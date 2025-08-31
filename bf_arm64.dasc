@@ -14,18 +14,27 @@ static int getchar_wrapper(void) {
 
 
 // ARM64-specific copy cell optimization (copy only, no clearing)
-static void compile_bf_copy_cell(dasm_State **Dst, int offset) {
-    |  ldrb w0, [x19]                    // Load from source cell
-    if (offset >= -256 && offset <= 255) {
-        |  ldrb w1, [x19, #offset]       // Load current destination value
-        |  add w0, w0, w1                // Add source to destination
-        |  strb w0, [x19, #offset]       // Store to destination cell at offset
+static void compile_bf_copy_cell(dasm_State **Dst, int src_offset, int dst_offset) {
+    // Load from source cell
+    if (src_offset >= -256 && src_offset <= 255) {
+        |  ldrb w0, [x19, #src_offset]   // Load from source cell at offset
     } else {
-        |  add x19, x19, #offset         // Add offset to pointer
+        |  add x19, x19, #src_offset     // Add src_offset to pointer
+        |  ldrb w0, [x19]                // Load from adjusted pointer
+        |  sub x19, x19, #src_offset     // Restore pointer
+    }
+    
+    // Add to destination cell
+    if (dst_offset >= -256 && dst_offset <= 255) {
+        |  ldrb w1, [x19, #dst_offset]   // Load current destination value
+        |  add w0, w0, w1                // Add source to destination
+        |  strb w0, [x19, #dst_offset]   // Store to destination cell at offset
+    } else {
+        |  add x19, x19, #dst_offset     // Add dst_offset to pointer
         |  ldrb w1, [x19]                // Load current destination value
         |  add w0, w0, w1                // Add source to destination
         |  strb w0, [x19]                // Store to destination cell
-        |  sub x19, x19, #offset         // Restore pointer
+        |  sub x19, x19, #dst_offset     // Restore pointer
     }
     // Note: Source cell clearing is now handled by explicit SET_CONST(0)
 }
@@ -216,15 +225,30 @@ static void compile_bf_output(dasm_State **Dst, int offset) {
 }
 
 // ARM64-specific set constant optimization
-static void compile_bf_set_const(dasm_State **Dst, int value) {
-    if (value == 0) {
-        |  mov w0, #0                     // Load zero
-        |  strb w0, [x19]                 // Set to zero
-    } else if (value > 0 && value <= 255) {
-        |  mov w0, #value                 // Load positive value
-        |  strb w0, [x19]                 // Set value
+static void compile_bf_set_const(dasm_State **Dst, int value, int offset) {
+    if (offset >= -256 && offset <= 255) {
+        if (value == 0) {
+            |  mov w0, #0                     // Load zero
+            |  strb w0, [x19, #offset]        // Set to zero at offset
+        } else if (value > 0 && value <= 255) {
+            |  mov w0, #value                 // Load positive value
+            |  strb w0, [x19, #offset]        // Set value at offset
+        } else {
+            |  mov w0, #(value & 0xFF)        // Load value (truncate to byte)
+            |  strb w0, [x19, #offset]        // Set value at offset
+        }
     } else {
-        |  mov w0, #(value & 0xFF)        // Load value (truncate to byte)
-        |  strb w0, [x19]                 // Set value
+        |  add x19, x19, #offset          // Add offset to pointer
+        if (value == 0) {
+            |  mov w0, #0                     // Load zero
+            |  strb w0, [x19]                 // Set to zero
+        } else if (value > 0 && value <= 255) {
+            |  mov w0, #value                 // Load positive value
+            |  strb w0, [x19]                 // Set value
+        } else {
+            |  mov w0, #(value & 0xFF)        // Load value (truncate to byte)
+            |  strb w0, [x19]                 // Set value
+        }
+        |  sub x19, x19, #offset          // Restore pointer
     }
 }

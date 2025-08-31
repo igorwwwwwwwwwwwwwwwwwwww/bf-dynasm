@@ -1,5 +1,6 @@
 #include "bf_ast.h"
 #include <string.h>
+#include <stdbool.h>
 
 // AST node creation functions
 ast_node_t* ast_create_node(ast_node_type_t type) {
@@ -73,9 +74,10 @@ ast_node_t* ast_create_mul_const(int multiplier, int src_offset, int dst_offset)
     return node;
 }
 
-ast_node_t* ast_create_set_const(int value) {
+ast_node_t* ast_create_set_const(int value, int offset) {
     ast_node_t *node = ast_create_node(AST_SET_CONST);
-    node->data.set_const.value = value;
+    node->data.basic.count = value;
+    node->data.basic.offset = offset;
     return node;
 }
 
@@ -135,7 +137,11 @@ void ast_print(ast_node_t *node, int indent) {
                    node->data.copy.dst_offset);
             break;
         case AST_SET_CONST:
-            fprintf(stderr, " (value: %d)", node->data.set_const.value);
+            if (node->data.basic.offset != 0) {
+                fprintf(stderr, " (value: %d, offset: %d)", node->data.basic.count, node->data.basic.offset);
+            } else {
+                fprintf(stderr, " (value: %d)", node->data.basic.count);
+            }
             break;
         case AST_INPUT:
         case AST_OUTPUT:
@@ -237,7 +243,7 @@ ast_node_t* ast_optimize(ast_node_t *node) {
             node->data.copy.dst_offset = offset;  // dst is at offset
 
             // Create SET_CONST(0) for explicit clearing and chain it
-            ast_node_t *clear_node = ast_create_set_const(0);
+            ast_node_t *clear_node = ast_create_set_const(0, 0);
             node->next = ast_create_sequence(clear_node, node->next);
 
             // Continue optimizing from current node
@@ -262,7 +268,7 @@ ast_node_t* ast_optimize(ast_node_t *node) {
             node->data.copy.dst_offset = offset;  // dst is at offset
 
             // Create SET_CONST(0) for explicit clearing and chain it
-            ast_node_t *clear_node = ast_create_set_const(0);
+            ast_node_t *clear_node = ast_create_set_const(0, 0);
             node->next = ast_create_sequence(clear_node, node->next);
 
             // Continue optimizing from current node
@@ -285,7 +291,8 @@ ast_node_t* ast_optimize(ast_node_t *node) {
         // Replace loop with set constant zero operation
         ast_free(node->data.loop.body);
         node->type = AST_SET_CONST;
-        node->data.set_const.value = 0;
+        node->data.basic.count = 0;
+        node->data.basic.offset = 0;
     }
 
     // Multiplication loop optimization: detect SET_VAL + [>MUL<-] patterns
@@ -337,15 +344,15 @@ ast_node_t* ast_optimize(ast_node_t *node) {
         return ast_optimize(node);
     }
 
-    // Set + Add coalescing: detect SET_CONST followed by ADD_VAL
+    // Set + Add coalescing: detect SET_CONST followed by ADD_VAL at same offset
     if (node->type == AST_SET_CONST && node->next &&
-        node->next->type == AST_ADD_VAL) {
+        node->next->type == AST_ADD_VAL && node->next->data.basic.offset == 0) {
 
-        int final_value = node->data.set_const.value + node->next->data.basic.count;
+        int final_value = node->data.basic.count + node->next->data.basic.count;
         ast_node_t *add_node = node->next;
 
         // Update SET_CONST with final value
-        node->data.set_const.value = final_value;
+        node->data.basic.count = final_value;
         node->next = add_node->next;
 
         // Free the ADD_VAL node
@@ -362,12 +369,7 @@ ast_node_t* ast_optimize(ast_node_t *node) {
 ast_node_t* ast_rewrite_sequences(ast_node_t *node) {
     if (!node) return NULL;
     
-    // First, recursively rewrite sequences in children (loops)
-    if (node->type == AST_LOOP && node->data.loop.body) {
-        node->data.loop.body = ast_rewrite_sequences(node->data.loop.body);
-    }
-    
-    // Now process this level - find sequences of operations between control flow
+    // Process this level - find sequences of operations between control flow
     ast_node_t *current = node;
     
     while (current) {
@@ -378,10 +380,12 @@ ast_node_t* ast_rewrite_sequences(ast_node_t *node) {
         int current_offset = 0;
         
         // Scan forward to find the end of this basic block
+        bool has_ptr_movements = false;
         while (block_end && block_end->type != AST_LOOP) {
             if (block_end->type == AST_MOVE_PTR) {
                 total_ptr_movement += block_end->data.basic.count;
                 current_offset += block_end->data.basic.count;
+                has_ptr_movements = true;
             }
             
             // If this is the last node or next node is a loop, end the block
@@ -391,12 +395,15 @@ ast_node_t* ast_rewrite_sequences(ast_node_t *node) {
             block_end = block_end->next;
         }
         
+        // Capture the next node before we modify the structure
+        ast_node_t *original_next = block_end ? block_end->next : NULL;
+        
         // If we have a block with pointer movements, rewrite it
-        if (block_start != block_end && total_ptr_movement != 0) {
+        if (block_start != block_end && has_ptr_movements) {
             ast_node_t *rewrite_current = block_start;
             current_offset = 0;
             
-            while (rewrite_current && rewrite_current != block_end->next) {
+            while (rewrite_current && rewrite_current != original_next) {
                 if (rewrite_current->type == AST_MOVE_PTR) {
                     current_offset += rewrite_current->data.basic.count;
                     
@@ -410,6 +417,20 @@ ast_node_t* ast_rewrite_sequences(ast_node_t *node) {
                 } else if (rewrite_current->type == AST_INPUT || rewrite_current->type == AST_OUTPUT) {
                     // Update INPUT/OUTPUT to use current offset
                     rewrite_current->data.basic.offset += current_offset;
+                    
+                } else if (rewrite_current->type == AST_SET_CONST) {
+                    // Update SET_CONST to use current offset
+                    rewrite_current->data.basic.offset += current_offset;
+                    
+                } else if (rewrite_current->type == AST_COPY_CELL) {
+                    // Update COPY_CELL offsets
+                    rewrite_current->data.copy.src_offset += current_offset;
+                    rewrite_current->data.copy.dst_offset += current_offset;
+                    
+                } else if (rewrite_current->type == AST_MUL_CONST) {
+                    // Update MUL_CONST offsets  
+                    rewrite_current->data.mul_const.src_offset += current_offset;
+                    rewrite_current->data.mul_const.dst_offset += current_offset;
                 }
                 
                 rewrite_current = rewrite_current->next;
@@ -418,16 +439,20 @@ ast_node_t* ast_rewrite_sequences(ast_node_t *node) {
             // Add a single MOVE_PTR at the end if needed
             if (total_ptr_movement != 0) {
                 ast_node_t *final_move = ast_create_move(total_ptr_movement);
-                final_move->next = block_end->next;
+                final_move->next = original_next;
                 block_end->next = final_move;
             }
         }
         
-        // Move to next block (skip over the loop if we hit one)
+        // Move to next block
         if (block_end && block_end->type == AST_LOOP) {
-            current = block_end->next;
+            // Recursively process the loop body
+            if (block_end->data.loop.body) {
+                block_end->data.loop.body = ast_rewrite_sequences(block_end->data.loop.body);
+            }
+            current = original_next;
         } else {
-            current = block_end ? block_end->next : NULL;
+            current = original_next;
         }
     }
     
@@ -452,11 +477,6 @@ ast_node_t* ast_rewrite_sequences(ast_node_t *node) {
             prev = current;
             current = current->next;
         }
-    }
-    
-    // Continue with next sibling
-    if (node && node->next) {
-        node->next = ast_rewrite_sequences(node->next);
     }
     
     return node;
