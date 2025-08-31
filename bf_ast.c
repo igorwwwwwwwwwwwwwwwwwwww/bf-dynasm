@@ -107,32 +107,32 @@ static const char* ast_type_name(ast_node_type_t type) {
 void ast_print(ast_node_t *node, int indent) {
     if (!node) return;
     
-    for (int i = 0; i < indent; i++) printf("  ");
+    for (int i = 0; i < indent; i++) fprintf(stderr, "  ");
     
-    printf("%s", ast_type_name(node->type));
+    fprintf(stderr, "%s", ast_type_name(node->type));
     switch (node->type) {
         case AST_MOVE_PTR:
         case AST_ADD_VAL:
-            if (node->data.basic.count != 0) printf(" (count: %d)", node->data.basic.count);
+            if (node->data.basic.count != 0) fprintf(stderr, " (count: %d)", node->data.basic.count);
             break;
         case AST_MUL_CONST:
-            printf(" (mult: %d, src: %d, dst: %d)", 
+            fprintf(stderr, " (mult: %d, src: %d, dst: %d)", 
                    node->data.mul_const.multiplier,
                    node->data.mul_const.src_offset, 
                    node->data.mul_const.dst_offset);
             break;
         case AST_COPY_CELL:
-            printf(" (src: %d, dst: %d)", 
+            fprintf(stderr, " (src: %d, dst: %d)", 
                    node->data.copy.src_offset, 
                    node->data.copy.dst_offset);
             break;
         case AST_SET_CONST:
-            printf(" (value: %d)", node->data.set_const.value);
+            fprintf(stderr, " (value: %d)", node->data.set_const.value);
             break;
         default:
             break;
     }
-    printf("\n");
+    fprintf(stderr, "\n");
     
     // For loops, print the body with increased indentation
     if (node->type == AST_LOOP && node->data.loop.body) {

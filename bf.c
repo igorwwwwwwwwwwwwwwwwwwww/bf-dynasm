@@ -56,15 +56,15 @@ static char *read_file(const char *filename, size_t *size) {
 
 
 static void dump_code_hex(void *code, size_t size) {
-    printf("\nDumping %zu bytes of compiled machine code:\n", size);
+    fprintf(stderr, "\nDumping %zu bytes of compiled machine code:\n", size);
     unsigned char *bytes = (unsigned char *)code;
     for (size_t i = 0; i < size; i++) {
-        if (i % 16 == 0) printf("%08zx: ", i);
-        printf("%02x ", bytes[i]);
-        if (i % 16 == 15) printf("\n");
+        if (i % 16 == 0) fprintf(stderr, "%08zx: ", i);
+        fprintf(stderr, "%02x ", bytes[i]);
+        if (i % 16 == 15) fprintf(stderr, "\n");
     }
-    if (size % 16 != 0) printf("\n");
-    printf("\n");
+    if (size % 16 != 0) fprintf(stderr, "\n");
+    fprintf(stderr, "\n");
 }
 
 // Direct AST compilation with access to static DynASM functions
@@ -214,7 +214,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (debug_mode) {
-        printf("%s AST dump:\n", optimize ? "Optimized" : "Unoptimized");
+        fprintf(stderr, "%s AST dump:\n", optimize ? "Optimized" : "Unoptimized");
         ast_print(ast, 0);
     }
 
