@@ -61,6 +61,7 @@ ast_node_t* ast_create_set_const(int value);
 void ast_free(ast_node_t *node);
 void ast_print(ast_node_t *node, int indent);
 ast_node_t* ast_optimize(ast_node_t *node);
+ast_node_t* ast_rewrite_sequences(ast_node_t *node);
 
 // AST traversal for code generation is in bf.c to access static DynASM functions
 

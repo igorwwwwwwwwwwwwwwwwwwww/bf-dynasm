@@ -357,3 +357,107 @@ ast_node_t* ast_optimize(ast_node_t *node) {
 
     return node;
 }
+
+// Sequence rewriting optimization: coalesce pointer movements and use offsets
+ast_node_t* ast_rewrite_sequences(ast_node_t *node) {
+    if (!node) return NULL;
+    
+    // First, recursively rewrite sequences in children (loops)
+    if (node->type == AST_LOOP && node->data.loop.body) {
+        node->data.loop.body = ast_rewrite_sequences(node->data.loop.body);
+    }
+    
+    // Now process this level - find sequences of operations between control flow
+    ast_node_t *current = node;
+    
+    while (current) {
+        // Find the start of a basic block (sequence without control flow)
+        ast_node_t *block_start = current;
+        ast_node_t *block_end = current;
+        int total_ptr_movement = 0;
+        int current_offset = 0;
+        
+        // Scan forward to find the end of this basic block
+        while (block_end && block_end->type != AST_LOOP) {
+            if (block_end->type == AST_MOVE_PTR) {
+                total_ptr_movement += block_end->data.basic.count;
+                current_offset += block_end->data.basic.count;
+            }
+            
+            // If this is the last node or next node is a loop, end the block
+            if (!block_end->next || block_end->next->type == AST_LOOP) {
+                break;
+            }
+            block_end = block_end->next;
+        }
+        
+        // If we have a block with pointer movements, rewrite it
+        if (block_start != block_end && total_ptr_movement != 0) {
+            ast_node_t *rewrite_current = block_start;
+            current_offset = 0;
+            
+            while (rewrite_current && rewrite_current != block_end->next) {
+                if (rewrite_current->type == AST_MOVE_PTR) {
+                    current_offset += rewrite_current->data.basic.count;
+                    
+                    // Mark this MOVE_PTR for removal by setting count to 0
+                    rewrite_current->data.basic.count = 0;
+                    
+                } else if (rewrite_current->type == AST_ADD_VAL) {
+                    // Update ADD_VAL to use current offset
+                    rewrite_current->data.basic.offset += current_offset;
+                    
+                } else if (rewrite_current->type == AST_INPUT || rewrite_current->type == AST_OUTPUT) {
+                    // Update INPUT/OUTPUT to use current offset
+                    rewrite_current->data.basic.offset += current_offset;
+                }
+                
+                rewrite_current = rewrite_current->next;
+            }
+            
+            // Add a single MOVE_PTR at the end if needed
+            if (total_ptr_movement != 0) {
+                ast_node_t *final_move = ast_create_move(total_ptr_movement);
+                final_move->next = block_end->next;
+                block_end->next = final_move;
+            }
+        }
+        
+        // Move to next block (skip over the loop if we hit one)
+        if (block_end && block_end->type == AST_LOOP) {
+            current = block_end->next;
+        } else {
+            current = block_end ? block_end->next : NULL;
+        }
+    }
+    
+    // Remove MOVE_PTR nodes with count=0 (marked for removal)
+    ast_node_t *prev = NULL;
+    current = node;
+    
+    while (current) {
+        if (current->type == AST_MOVE_PTR && current->data.basic.count == 0) {
+            // Remove this node
+            if (prev) {
+                prev->next = current->next;
+                free(current);
+                current = prev->next;
+            } else {
+                // Removing the first node
+                node = current->next;
+                free(current);
+                current = node;
+            }
+        } else {
+            prev = current;
+            current = current->next;
+        }
+    }
+    
+    // Continue with next sibling
+    if (node && node->next) {
+        node->next = ast_rewrite_sequences(node->next);
+    }
+    
+    return node;
+}

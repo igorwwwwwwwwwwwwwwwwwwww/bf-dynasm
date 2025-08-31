@@ -218,6 +218,7 @@ int main(int argc, char *argv[]) {
     // Optimize the AST if optimizations are enabled
     if (optimize) {
         ast = ast_optimize(ast);
+        ast = ast_rewrite_sequences(ast);
     }
 
     if (debug_mode) {
