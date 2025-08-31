@@ -14,6 +14,6 @@ COPY . .
 RUN make
 
 # Test with Hello World
-RUN ./bf examples/hello.bf
+RUN ./bf examples/hello.b
 
-CMD ["./bf", "examples/hello.bf"]
+CMD ["./bf", "examples/hello.b"]

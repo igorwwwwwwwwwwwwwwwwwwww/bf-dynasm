@@ -119,7 +119,7 @@ static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label
     if (node->next) {
         next_label = ast_compile_direct(node->next, Dst, next_label);
     }
-    
+
     return next_label;
 }
 
@@ -204,9 +204,9 @@ int main(int argc, char *argv[]) {
         fprintf(stream, "  --debug           Enable debug mode (dump AST and compiled code)\n");
         fprintf(stream, "  --no-optimize     Disable AST optimizations\n");
         fprintf(stream, "\nExamples:\n");
-        fprintf(stream, "  %s examples/hello.bf\n", argv[0]);
-        fprintf(stream, "  %s --debug examples/fizzbuzz.bf\n", argv[0]);
-        fprintf(stream, "  %s --no-optimize examples/mandel.bf\n", argv[0]);
+        fprintf(stream, "  %s examples/hello.b\n", argv[0]);
+        fprintf(stream, "  %s --debug examples/fizzbuzz.b\n", argv[0]);
+        fprintf(stream, "  %s --no-optimize examples/mandelbrot.b\n", argv[0]);
         return show_help ? 0 : 1;
     }
 

@@ -80,10 +80,10 @@ clean:
 
 test: $(TARGET)
 	@echo "Testing native version..."
-	./$(TARGET) examples/hello.bf
+	./$(TARGET) examples/hello.b
 
 test-amd64-darwin: $(TARGET_AMD64_DARWIN)
 	@echo "Testing AMD64 Darwin version (via Rosetta)..."
-	arch -x86_64 ./$(TARGET_AMD64_DARWIN) examples/hello.bf
+	arch -x86_64 ./$(TARGET_AMD64_DARWIN) examples/hello.b
 
 .PHONY: all clean test test-amd64-darwin amd64-darwin

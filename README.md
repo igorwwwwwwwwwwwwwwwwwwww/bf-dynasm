@@ -40,13 +40,13 @@ make clean
 
 ```bash
 # Run Brainfuck program
-./bf examples/hello.bf
+./bf examples/hello.b
 
 # Run with debug mode (dumps AST and machine code)
-./bf --debug examples/fizzbuzz.bf
+./bf --debug examples/fizzbuzz.b
 
 # Run without optimizations
-./bf --no-optimize examples/hello.bf
+./bf --no-optimize examples/hello.b
 
 # Show help
 ./bf --help
@@ -76,7 +76,7 @@ The compiler includes several AST-level optimizations:
 
 ```bash
 # AMD64 version (via Rosetta on ARM64 Macs)
-arch -x86_64 ./bf_amd64_darwin examples/hello.bf
+arch -x86_64 ./bf_amd64_darwin examples/hello.b
 ```
 
 ## Testing
@@ -110,10 +110,10 @@ docker run --rm dynasm-bf
 
 ```bash
 # Test with custom Brainfuck code
-docker run --rm dynasm-bf sh -c 'echo "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++." > test.bf && ./bf test.bf'
+docker run --rm dynasm-bf sh -c 'echo "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++." > test.b && ./bf test.b'
 
 # Run with debug mode to see compiled machine code
-docker run --rm dynasm-bf ./bf --debug examples/hello.bf
+docker run --rm dynasm-bf ./bf --debug examples/hello.b
 ```
 
 ### Cross-Platform Testing
