@@ -239,42 +239,34 @@ static void compile_bf_add_val(dasm_State **Dst, int count, int offset) {
 }
 
 static void compile_bf_input(dasm_State **Dst, int offset) {
-    if (offset == 0) {
-        compile_bf_arch(Dst, ',');
+    |  mov x16, #(uintptr_t)getchar_wrapper & 0xffff
+    |  movk x16, #((uintptr_t)getchar_wrapper >> 16) & 0xffff, lsl #16
+    |  movk x16, #((uintptr_t)getchar_wrapper >> 32) & 0xffff, lsl #32
+    |  movk x16, #((uintptr_t)getchar_wrapper >> 48) & 0xffff, lsl #48
+    |  blr x16
+    if (offset >= -256 && offset <= 255) {
+        |  strb w0, [x19, #offset]             // Store result at offset
     } else {
-        |  mov x16, #(uintptr_t)getchar_wrapper & 0xffff
-        |  movk x16, #((uintptr_t)getchar_wrapper >> 16) & 0xffff, lsl #16
-        |  movk x16, #((uintptr_t)getchar_wrapper >> 32) & 0xffff, lsl #32
-        |  movk x16, #((uintptr_t)getchar_wrapper >> 48) & 0xffff, lsl #48
-        |  blr x16
-        if (offset >= -256 && offset <= 255) {
-            |  strb w0, [x19, #offset]             // Store result at offset
-        } else {
-            |  add x19, x19, #offset              // Add offset to pointer
-            |  strb w0, [x19]                     // Store result at adjusted pointer
-            |  sub x19, x19, #offset              // Restore pointer
-        }
+        |  add x19, x19, #offset              // Add offset to pointer
+        |  strb w0, [x19]                     // Store result at adjusted pointer
+        |  sub x19, x19, #offset              // Restore pointer
     }
 }
 
 static void compile_bf_output(dasm_State **Dst, int offset) {
-    if (offset == 0) {
-        compile_bf_arch(Dst, '.');
+    if (offset >= -256 && offset <= 255) {
+        |  ldrb w0, [x19, #offset]            // Load byte from offset
     } else {
-        if (offset >= -256 && offset <= 255) {
-            |  ldrb w0, [x19, #offset]            // Load byte from offset
-        } else {
-            |  add x19, x19, #offset              // Add offset to pointer
-            |  ldrb w0, [x19]                     // Load byte from adjusted pointer
-            |  sub x19, x19, #offset              // Restore pointer
-        }
-        |  sxtb w0, w0
-        |  mov x16, #(uintptr_t)putchar_wrapper & 0xffff
-        |  movk x16, #((uintptr_t)putchar_wrapper >> 16) & 0xffff, lsl #16
-        |  movk x16, #((uintptr_t)putchar_wrapper >> 32) & 0xffff, lsl #32
-        |  movk x16, #((uintptr_t)putchar_wrapper >> 48) & 0xffff, lsl #48
-        |  blr x16
+        |  add x19, x19, #offset              // Add offset to pointer
+        |  ldrb w0, [x19]                     // Load byte from adjusted pointer
+        |  sub x19, x19, #offset              // Restore pointer
     }
+    |  sxtb w0, w0
+    |  mov x16, #(uintptr_t)putchar_wrapper & 0xffff
+    |  movk x16, #((uintptr_t)putchar_wrapper >> 16) & 0xffff, lsl #16
+    |  movk x16, #((uintptr_t)putchar_wrapper >> 32) & 0xffff, lsl #32
+    |  movk x16, #((uintptr_t)putchar_wrapper >> 48) & 0xffff, lsl #48
+    |  blr x16
 }
 
 // ARM64-specific set constant optimization
