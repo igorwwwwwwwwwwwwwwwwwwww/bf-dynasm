@@ -102,10 +102,6 @@ static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label
             compile_bf_copy_cell(Dst, node->data.copy.src_offset, node->data.copy.dst_offset);
             break;
 
-        case AST_MUL_CONST:
-            compile_bf_mul_const(Dst, node->data.mul_const.multiplier, node->data.mul_const.dst_offset);
-            break;
-
         case AST_SET_CONST:
             compile_bf_set_const(Dst, node->data.basic.count, node->data.basic.offset);
             break;
