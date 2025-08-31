@@ -35,7 +35,7 @@ static void compile_bf_mul_const(dasm_State **Dst, int multiplier, int target_of
     // Multiply current cell by multiplier, add to target cell
     // Semantics: target += source * multiplier; source = 0
     |  ldrb w0, [x19]                    // Load source value
-    |  mov w1, #multiplier               // Load multiplier  
+    |  mov w1, #multiplier               // Load multiplier
     |  mul w0, w0, w1                    // source * multiplier
     if (target_offset == 1) {
         |  ldrb w1, [x19, #1]            // Load current target value
@@ -228,4 +228,3 @@ static void compile_bf_set_const(dasm_State **Dst, int value) {
         |  strb w0, [x19]                 // Set value
     }
 }
-

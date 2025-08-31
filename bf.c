@@ -54,7 +54,6 @@ static char *read_file(const char *filename, size_t *size) {
     return content;
 }
 
-
 static void dump_code_hex(void *code, size_t size) {
     fprintf(stderr, "\nDumping %zu bytes of compiled machine code:\n", size);
     unsigned char *bytes = (unsigned char *)code;
@@ -99,7 +98,6 @@ static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label
             break;
         }
 
-
         case AST_COPY_CELL:
             compile_bf_copy_cell(Dst, node->data.copy.dst_offset);
             break;
@@ -107,6 +105,7 @@ static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label
         case AST_MUL_CONST:
             compile_bf_mul_const(Dst, node->data.mul_const.multiplier, node->data.mul_const.dst_offset);
             break;
+
         case AST_SET_CONST:
             compile_bf_set_const(Dst, node->data.set_const.value);
             break;

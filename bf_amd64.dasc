@@ -179,4 +179,3 @@ static void compile_bf_set_const(dasm_State **Dst, int value) {
         |  mov byte [rax], (value & 0xFF)  // Set value (truncate to byte)
     }
 }
-

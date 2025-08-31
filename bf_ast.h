@@ -10,7 +10,7 @@ typedef enum {
     AST_OUTPUT,         // .
     AST_INPUT,          // ,
     AST_LOOP,           // [...]
-    
+
     // Optimized high-level operations
     AST_COPY_CELL,      // Optimized [-<+>] (copy current to left)
     AST_MUL_CONST,      // Optimized ++++[>+++<-]
@@ -46,7 +46,7 @@ typedef struct ast_node {
 
 // AST construction functions
 ast_node_t* ast_create_move(int count);
-ast_node_t* ast_create_add(int count, int offset); 
+ast_node_t* ast_create_add(int count, int offset);
 ast_node_t* ast_create_output(int offset);
 ast_node_t* ast_create_input(int offset);
 ast_node_t* ast_create_loop(ast_node_t *body);
