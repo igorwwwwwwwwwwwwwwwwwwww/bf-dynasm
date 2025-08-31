@@ -175,12 +175,16 @@ static bf_func compile_bf_ast(ast_node_t *ast, int debug_mode) {
 
 int main(int argc, char *argv[]) {
     int debug_mode = 0;
+    int optimize = 1;
     int arg_offset = 1;
 
     // Parse flags
     for (int i = 1; i < argc && argv[i][0] == '-'; i++) {
-        if (strcmp(argv[i], "-d") == 0) {
+        if (strcmp(argv[i], "--debug") == 0) {
             debug_mode = 1;
+            arg_offset++;
+        } else if (strcmp(argv[i], "--no-optimize") == 0) {
+            optimize = 0;
             arg_offset++;
         } else {
             fprintf(stderr, "Unknown flag: %s\n", argv[i]);
@@ -189,8 +193,9 @@ int main(int argc, char *argv[]) {
     }
 
     if (argc < arg_offset + 1) {
-        fprintf(stderr, "Usage: %s [-d] <brainfuck_file>\n", argv[0]);
-        fprintf(stderr, "  -d: Enable debug mode (dump compiled code)\n");
+        fprintf(stderr, "Usage: %s [options] <brainfuck_file>\n", argv[0]);
+        fprintf(stderr, "  --debug: Enable debug mode (dump compiled code)\n");
+        fprintf(stderr, "  --no-optimize: Disable optimizations\n");
         return 1;
     }
 
@@ -203,11 +208,13 @@ int main(int argc, char *argv[]) {
     // Parse program into AST
     ast = parse_bf_program(program);
 
-    // Optimize the AST
-    ast = ast_optimize(ast);
+    // Optimize the AST if optimizations are enabled
+    if (optimize) {
+        ast = ast_optimize(ast);
+    }
 
     if (debug_mode) {
-        printf("Optimized AST dump:\n");
+        printf("%s AST dump:\n", optimize ? "Optimized" : "Unoptimized");
         ast_print(ast, 0);
     }
 
