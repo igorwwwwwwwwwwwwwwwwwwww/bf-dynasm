@@ -88,7 +88,7 @@ static void compile_bf_arch_optimized(dasm_State **Dst, char instruction, int co
 }
 
 
-// AMD64-specific copy cell optimization for [-MOVE+MOVE_BACK] patterns
+// AMD64-specific copy cell optimization (copy only, no clearing)
 static void compile_bf_copy_cell(dasm_State **Dst, int offset) {
     |  mov rax, [rsp+8]              // Load memory pointer
     |  mov dl, [rax]                 // Load from source cell
@@ -98,8 +98,7 @@ static void compile_bf_copy_cell(dasm_State **Dst, int offset) {
         |  add rax, offset           // Add offset to pointer
         |  add [rax], dl             // Add to destination cell
     }
-    |  mov rax, [rsp+8]              // Reload memory pointer  
-    |  mov byte [rax], 0             // Clear source cell
+    // Note: Source cell clearing is now handled by explicit SET_CONST(0)
 }
 
 // AMD64-specific multiplication optimization for n*m patterns
