@@ -8,10 +8,10 @@ static int putchar_wrapper(int c) {
 }
 
 static int getchar_wrapper(void) {
-    return getchar();
+    int c = getchar();
+    if (c == EOF) return 0;
+    return c;
 }
-
-
 
 // ARM64-specific copy cell optimization (copy only, no clearing)
 static void compile_bf_copy_cell(dasm_State **Dst, int src_offset, int dst_offset) {
@@ -23,7 +23,7 @@ static void compile_bf_copy_cell(dasm_State **Dst, int src_offset, int dst_offse
         |  ldrb w0, [x19]                // Load from adjusted pointer
         |  sub x19, x19, #src_offset     // Restore pointer
     }
-    
+
     // Add to destination cell
     if (dst_offset >= -256 && dst_offset <= 255) {
         |  ldrb w1, [x19, #dst_offset]   // Load current destination value
@@ -38,7 +38,6 @@ static void compile_bf_copy_cell(dasm_State **Dst, int src_offset, int dst_offse
     }
     // Note: Source cell clearing is now handled by explicit SET_CONST(0)
 }
-
 
 static void compile_bf_prologue(dasm_State **Dst) {
     |  stp x29, x30, [sp, #-32]!

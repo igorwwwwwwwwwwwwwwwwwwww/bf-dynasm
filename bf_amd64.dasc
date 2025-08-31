@@ -8,9 +8,10 @@ static int putchar_wrapper(int c) {
 }
 
 static int getchar_wrapper(void) {
-    return getchar();
+    int c = getchar();
+    if (c == EOF) return 0;
+    return c;
 }
-
 
 // AMD64-specific copy cell optimization (copy only, no clearing)
 static void compile_bf_copy_cell(dasm_State **Dst, int offset) {
@@ -24,7 +25,6 @@ static void compile_bf_copy_cell(dasm_State **Dst, int offset) {
     }
     // Note: Source cell clearing is now handled by explicit SET_CONST(0)
 }
-
 
 static void compile_bf_prologue(dasm_State **Dst) {
     |  push rbp
