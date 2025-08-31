@@ -11,106 +11,6 @@ static int getchar_wrapper(void) {
     return getchar();
 }
 
-// ARM64-specific compilation function
-static void compile_bf_arch(dasm_State **Dst, char instruction) {
-    switch (instruction) {
-        case '>':
-            |  add x19, x19, #1
-            break;
-        case '<':
-            |  sub x19, x19, #1
-            break;
-        case '+':
-            |  ldrb w0, [x19]
-            |  add w0, w0, #1
-            |  strb w0, [x19]
-            break;
-        case '-':
-            |  ldrb w0, [x19]
-            |  sub w0, w0, #1
-            |  strb w0, [x19]
-            break;
-        case '.':
-            |  ldrb w0, [x19]
-            |  sxtb w0, w0
-            |  mov x16, #(uintptr_t)putchar_wrapper & 0xffff
-            |  movk x16, #((uintptr_t)putchar_wrapper >> 16) & 0xffff, lsl #16
-            |  movk x16, #((uintptr_t)putchar_wrapper >> 32) & 0xffff, lsl #32
-            |  movk x16, #((uintptr_t)putchar_wrapper >> 48) & 0xffff, lsl #48
-            |  blr x16
-            break;
-        case ',':
-            |  mov x16, #(uintptr_t)getchar_wrapper & 0xffff
-            |  movk x16, #((uintptr_t)getchar_wrapper >> 16) & 0xffff, lsl #16
-            |  movk x16, #((uintptr_t)getchar_wrapper >> 32) & 0xffff, lsl #32
-            |  movk x16, #((uintptr_t)getchar_wrapper >> 48) & 0xffff, lsl #48
-            |  blr x16
-            |  strb w0, [x19]
-            break;
-    }
-}
-
-// ARM64-specific optimized compilation function with run-length encoding
-static void compile_bf_arch_optimized(dasm_State **Dst, char instruction, int count) {
-    switch (instruction) {
-        case '>':
-            if (count == 1) {
-                |  add x19, x19, #1
-            } else if (count <= 4095) {
-                |  add x19, x19, #count
-            } else {
-                // Handle large counts that don't fit in immediate
-                |  mov x16, #count
-                |  add x19, x19, x16
-            }
-            break;
-        case '<':
-            if (count == 1) {
-                |  sub x19, x19, #1
-            } else if (count <= 4095) {
-                |  sub x19, x19, #count
-            } else {
-                // Handle large counts that don't fit in immediate
-                |  mov x16, #count
-                |  sub x19, x19, x16
-            }
-            break;
-        case '+':
-            if (count == 1) {
-                |  ldrb w0, [x19]
-                |  add w0, w0, #1
-                |  strb w0, [x19]
-            } else if (count <= 255) {
-                |  ldrb w0, [x19]
-                |  add w0, w0, #count
-                |  strb w0, [x19]
-            } else {
-                // Handle large counts or overflow
-                |  ldrb w0, [x19]
-                |  mov w16, #count
-                |  add w0, w0, w16
-                |  strb w0, [x19]
-            }
-            break;
-        case '-':
-            if (count == 1) {
-                |  ldrb w0, [x19]
-                |  sub w0, w0, #1
-                |  strb w0, [x19]
-            } else if (count <= 255) {
-                |  ldrb w0, [x19]
-                |  sub w0, w0, #count
-                |  strb w0, [x19]
-            } else {
-                // Handle large counts or overflow
-                |  ldrb w0, [x19]
-                |  mov w16, #count
-                |  sub w0, w0, w16
-                |  strb w0, [x19]
-            }
-            break;
-    }
-}
 
 
 // ARM64-specific copy cell optimization (copy only, no clearing)
@@ -186,9 +86,26 @@ static void compile_bf_label(dasm_State **Dst, int label) {
 // AST-based compilation wrapper functions
 static void compile_bf_move_ptr(dasm_State **Dst, int count) {
     if (count > 0) {
-        compile_bf_arch_optimized(Dst, '>', count);
+        if (count == 1) {
+            |  add x19, x19, #1
+        } else if (count <= 4095) {
+            |  add x19, x19, #count
+        } else {
+            // Handle large counts that don't fit in immediate
+            |  mov x16, #count
+            |  add x19, x19, x16
+        }
     } else if (count < 0) {
-        compile_bf_arch_optimized(Dst, '<', -count);
+        int abs_count = -count;
+        if (abs_count == 1) {
+            |  sub x19, x19, #1
+        } else if (abs_count <= 4095) {
+            |  sub x19, x19, #abs_count
+        } else {
+            // Handle large counts that don't fit in immediate
+            |  mov x16, #abs_count
+            |  sub x19, x19, x16
+        }
     }
 }
 
@@ -196,9 +113,38 @@ static void compile_bf_add_val(dasm_State **Dst, int count, int offset) {
     if (offset == 0) {
         // Normal ADD at current position
         if (count > 0) {
-            compile_bf_arch_optimized(Dst, '+', count);
+            if (count == 1) {
+                |  ldrb w0, [x19]
+                |  add w0, w0, #1
+                |  strb w0, [x19]
+            } else if (count <= 255) {
+                |  ldrb w0, [x19]
+                |  add w0, w0, #count
+                |  strb w0, [x19]
+            } else {
+                // Handle large counts or overflow
+                |  ldrb w0, [x19]
+                |  mov w16, #count
+                |  add w0, w0, w16
+                |  strb w0, [x19]
+            }
         } else if (count < 0) {
-            compile_bf_arch_optimized(Dst, '-', -count);
+            int abs_count = -count;
+            if (abs_count == 1) {
+                |  ldrb w0, [x19]
+                |  sub w0, w0, #1
+                |  strb w0, [x19]
+            } else if (abs_count <= 255) {
+                |  ldrb w0, [x19]
+                |  sub w0, w0, #abs_count
+                |  strb w0, [x19]
+            } else {
+                // Handle large counts or overflow
+                |  ldrb w0, [x19]
+                |  mov w16, #abs_count
+                |  sub w0, w0, w16
+                |  strb w0, [x19]
+            }
         }
     } else {
         // ADD at offset

@@ -11,82 +11,6 @@ static int getchar_wrapper(void) {
     return getchar();
 }
 
-// AMD64-specific compilation function
-static void compile_bf_arch(dasm_State **Dst, char instruction) {
-    switch (instruction) {
-        case '>':
-            |  add qword [rsp+8], 1    // Increment memory pointer on stack
-            break;
-        case '<':
-            |  sub qword [rsp+8], 1    // Decrement memory pointer on stack
-            break;
-        case '+':
-            |  mov rax, [rsp+8]      // Load memory pointer from stack
-            |  inc byte [rax]        // Increment value at memory pointer
-            break;
-        case '-':
-            |  mov rax, [rsp+8]      // Load memory pointer from stack
-            |  dec byte [rax]        // Decrement value at memory pointer
-            break;
-        case '.':
-            |  mov rax, [rsp+8]      // Load memory pointer from stack
-            |  movzx edi, byte [rax] // Load byte and put in first argument register
-            |  mov64 rax, (uintptr_t)putchar_wrapper  // Load function pointer into rax
-            |  call rax              // Call through register
-            break;
-        case ',':
-            |  mov64 rax, (uintptr_t)getchar_wrapper   // Load function pointer
-            |  call rax              // Call through register
-            |  mov rdx, [rsp+8]      // Load memory pointer from stack
-            |  mov [rdx], al         // Store result at memory pointer
-            break;
-    }
-}
-
-// AMD64-specific optimized compilation function with run-length encoding
-static void compile_bf_arch_optimized(dasm_State **Dst, char instruction, int count) {
-    switch (instruction) {
-        case '>':
-            if (count == 1) {
-                |  add qword [rsp+8], 1
-            } else {
-                |  add qword [rsp+8], count
-            }
-            break;
-        case '<':
-            if (count == 1) {
-                |  sub qword [rsp+8], 1
-            } else {
-                |  sub qword [rsp+8], count
-            }
-            break;
-        case '+':
-            if (count == 1) {
-                |  mov rax, [rsp+8]
-                |  inc byte [rax]
-            } else if (count <= 127) {
-                |  mov rax, [rsp+8]
-                |  add byte [rax], count
-            } else {
-                |  mov rax, [rsp+8]
-                |  add byte [rax], count  // x86 allows larger immediates
-            }
-            break;
-        case '-':
-            if (count == 1) {
-                |  mov rax, [rsp+8]
-                |  dec byte [rax]
-            } else if (count <= 127) {
-                |  mov rax, [rsp+8]
-                |  sub byte [rax], count
-            } else {
-                |  mov rax, [rsp+8]
-                |  sub byte [rax], count  // x86 allows larger immediates
-            }
-            break;
-    }
-}
-
 
 // AMD64-specific copy cell optimization (copy only, no clearing)
 static void compile_bf_copy_cell(dasm_State **Dst, int offset) {
@@ -153,9 +77,18 @@ static void compile_bf_label(dasm_State **Dst, int label) {
 // AST-based compilation wrapper functions
 static void compile_bf_move_ptr(dasm_State **Dst, int count) {
     if (count > 0) {
-        compile_bf_arch_optimized(Dst, '>', count);
+        if (count == 1) {
+            |  add qword [rsp+8], 1
+        } else {
+            |  add qword [rsp+8], count
+        }
     } else if (count < 0) {
-        compile_bf_arch_optimized(Dst, '<', -count);
+        int abs_count = -count;
+        if (abs_count == 1) {
+            |  sub qword [rsp+8], 1
+        } else {
+            |  sub qword [rsp+8], abs_count
+        }
     }
 }
 
@@ -163,9 +96,28 @@ static void compile_bf_add_val(dasm_State **Dst, int count, int offset) {
     if (offset == 0) {
         // Normal ADD at current position
         if (count > 0) {
-            compile_bf_arch_optimized(Dst, '+', count);
+            if (count == 1) {
+                |  mov rax, [rsp+8]
+                |  inc byte [rax]
+            } else if (count <= 127) {
+                |  mov rax, [rsp+8]
+                |  add byte [rax], count
+            } else {
+                |  mov rax, [rsp+8]
+                |  add byte [rax], count  // x86 allows larger immediates
+            }
         } else if (count < 0) {
-            compile_bf_arch_optimized(Dst, '-', -count);
+            int abs_count = -count;
+            if (abs_count == 1) {
+                |  mov rax, [rsp+8]
+                |  dec byte [rax]
+            } else if (abs_count <= 127) {
+                |  mov rax, [rsp+8]
+                |  sub byte [rax], abs_count
+            } else {
+                |  mov rax, [rsp+8]
+                |  sub byte [rax], abs_count  // x86 allows larger immediates
+            }
         }
     } else {
         // ADD at offset
