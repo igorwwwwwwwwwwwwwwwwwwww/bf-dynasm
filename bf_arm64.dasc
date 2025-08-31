@@ -200,6 +200,20 @@ static void compile_bf_input(dasm_State **Dst) {
     compile_bf_arch(Dst, ',');
 }
 
+// ARM64-specific set constant optimization
+static void compile_bf_set_const(dasm_State **Dst, int value) {
+    if (value == 0) {
+        |  mov w0, #0                     // Load zero
+        |  strb w0, [x19]                 // Set to zero
+    } else if (value > 0 && value <= 255) {
+        |  mov w0, #value                 // Load positive value
+        |  strb w0, [x19]                 // Set value
+    } else {
+        |  mov w0, #(value & 0xFF)        // Load value (truncate to byte)
+        |  strb w0, [x19]                 // Set value
+    }
+}
+
 // ARM64-specific add value at offset optimization
 static void compile_bf_add_val_at_offset(dasm_State **Dst, int value, int offset) {
     if (value > 0) {

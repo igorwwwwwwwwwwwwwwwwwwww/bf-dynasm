@@ -287,5 +287,24 @@ ast_node_t* ast_optimize(ast_node_t *node) {
         return ast_optimize(node);
     }
     
+    // Clear + Add coalescing: detect CLEAR_CELL followed by ADD_VAL
+    if (node->type == AST_CLEAR_CELL && node->next && 
+        node->next->type == AST_ADD_VAL) {
+        
+        int value = node->next->data.basic.count;
+        ast_node_t *add_node = node->next;
+        
+        // Replace CLEAR_CELL with SET_CONST
+        node->type = AST_SET_CONST;
+        node->data.set_const.value = value;
+        node->next = add_node->next;
+        
+        // Free the ADD_VAL node
+        free(add_node);
+        
+        // Continue optimizing from current node
+        return ast_optimize(node);
+    }
+    
     return node;
 }

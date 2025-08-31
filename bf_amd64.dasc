@@ -171,6 +171,18 @@ static void compile_bf_input(dasm_State **Dst) {
     compile_bf_arch(Dst, ',');
 }
 
+// AMD64-specific set constant optimization
+static void compile_bf_set_const(dasm_State **Dst, int value) {
+    |  mov rax, [rsp+8]              // Load memory pointer
+    if (value == 0) {
+        |  mov byte [rax], 0          // Set to zero
+    } else if (value > 0 && value <= 255) {
+        |  mov byte [rax], value      // Set positive value
+    } else {
+        |  mov byte [rax], (value & 0xFF)  // Set value (truncate to byte)
+    }
+}
+
 // AMD64-specific add value at offset optimization
 static void compile_bf_add_val_at_offset(dasm_State **Dst, int value, int offset) {
     |  mov rax, [rsp+8]              // Load memory pointer
