@@ -12,10 +12,9 @@ typedef enum {
     AST_LOOP,           // [...]
     
     // Optimized high-level operations
-    AST_CLEAR_CELL,     // Optimized [-]
     AST_COPY_CELL,      // Optimized [-<+>] (copy current to left)
     AST_MUL_CONST,      // Optimized ++++[>+++<-]
-    AST_SET_CONST,      // Direct constant assignment
+    AST_SET_CONST,      // Direct constant assignment (includes clear cell as SET_CONST(0))
     AST_ADD_VAL_AT_OFFSET, // Optimized >ADD<, ADD at offset without moving pointer
 } ast_node_type_t;
 
@@ -58,7 +57,6 @@ ast_node_t* ast_create_loop(ast_node_t *body);
 ast_node_t* ast_create_sequence(ast_node_t *first, ast_node_t *second);
 
 // Optimized AST nodes
-ast_node_t* ast_create_clear_cell(void);
 ast_node_t* ast_create_copy_cell(int src_offset, int dst_offset);
 ast_node_t* ast_create_mul_const(int multiplier, int src_offset, int dst_offset);
 ast_node_t* ast_create_set_const(int value);

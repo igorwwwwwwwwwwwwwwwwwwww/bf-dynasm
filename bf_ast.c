@@ -52,9 +52,6 @@ ast_node_t* ast_create_sequence(ast_node_t *first, ast_node_t *second) {
 }
 
 // Optimized AST node creation
-ast_node_t* ast_create_clear_cell(void) {
-    return ast_create_node(AST_CLEAR_CELL);
-}
 
 ast_node_t* ast_create_copy_cell(int src_offset, int dst_offset) {
     ast_node_t *node = ast_create_node(AST_COPY_CELL);
@@ -103,7 +100,6 @@ static const char* ast_type_name(ast_node_type_t type) {
         case AST_OUTPUT: return "OUTPUT";
         case AST_INPUT: return "INPUT";
         case AST_LOOP: return "LOOP";
-        case AST_CLEAR_CELL: return "CLEAR_CELL";
         case AST_COPY_CELL: return "COPY_CELL";
         case AST_MUL_CONST: return "MUL_CONST";
         case AST_SET_CONST: return "SET_CONST";
@@ -216,9 +212,10 @@ ast_node_t* ast_optimize(ast_node_t *node) {
     if (node->type == AST_LOOP && node->data.loop.body && 
         node->data.loop.body->type == AST_ADD_VAL && node->data.loop.body->data.basic.count == -1 &&
         !node->data.loop.body->next) {
-        // Replace loop with clear cell operation
+        // Replace loop with set constant zero operation
         ast_free(node->data.loop.body);
-        node->type = AST_CLEAR_CELL;
+        node->type = AST_SET_CONST;
+        node->data.set_const.value = 0;
     }
     
     // Copy loop optimization: detect [-<+>] pattern (copy current to left)
@@ -287,16 +284,15 @@ ast_node_t* ast_optimize(ast_node_t *node) {
         return ast_optimize(node);
     }
     
-    // Clear + Add coalescing: detect CLEAR_CELL followed by ADD_VAL
-    if (node->type == AST_CLEAR_CELL && node->next && 
+    // Set + Add coalescing: detect SET_CONST followed by ADD_VAL
+    if (node->type == AST_SET_CONST && node->next && 
         node->next->type == AST_ADD_VAL) {
         
-        int value = node->next->data.basic.count;
+        int final_value = node->data.set_const.value + node->next->data.basic.count;
         ast_node_t *add_node = node->next;
         
-        // Replace CLEAR_CELL with SET_CONST
-        node->type = AST_SET_CONST;
-        node->data.set_const.value = value;
+        // Update SET_CONST with final value
+        node->data.set_const.value = final_value;
         node->next = add_node->next;
         
         // Free the ADD_VAL node

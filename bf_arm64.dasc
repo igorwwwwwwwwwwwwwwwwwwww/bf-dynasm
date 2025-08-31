@@ -112,11 +112,6 @@ static void compile_bf_arch_optimized(dasm_State **Dst, char instruction, int co
     }
 }
 
-// ARM64-specific clear cell optimization for [-] pattern
-static void compile_bf_clear_cell(dasm_State **Dst) {
-    |  mov w0, #0
-    |  strb w0, [x19]
-}
 
 // ARM64-specific copy current-to-left optimization for [-<+>] pattern
 static void compile_bf_copy_current_to_left(dasm_State **Dst) {
