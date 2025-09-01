@@ -108,9 +108,6 @@ void ast_print(ast_node_t *node, int indent) {
     for (int i = 0; i < indent; i++) fprintf(stderr, "  ");
 
     fprintf(stderr, "%s", ast_type_name(node->type));
-    if (node->line > 0 || node->column > 0) {
-        fprintf(stderr, " @%d:%d", node->line, node->column);
-    }
     switch (node->type) {
         case AST_MOVE_PTR:
             if (node->data.basic.count != 0) fprintf(stderr, " (count: %d)", node->data.basic.count);
@@ -148,6 +145,9 @@ void ast_print(ast_node_t *node, int indent) {
             break;
         default:
             break;
+    }
+    if (node->line > 0 || node->column > 0) {
+        fprintf(stderr, " \033[90m@%d:%d\033[0m", node->line, node->column);
     }
     fprintf(stderr, "\n");
 
