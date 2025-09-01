@@ -73,6 +73,13 @@ ast_node_t* ast_create_set_const(int value, int offset) {
     return node;
 }
 
+ast_node_t* ast_create_mul(int multiplier, int src_offset, int dst_offset) {
+    ast_node_t *node = ast_create_node(AST_MUL);
+    node->data.mul.multiplier = multiplier;
+    node->data.mul.src_offset = src_offset;
+    node->data.mul.dst_offset = dst_offset;
+    return node;
+}
 
 // Memory management
 void ast_free(ast_node_t *node) {
@@ -95,6 +102,7 @@ static const char* ast_type_name(ast_node_type_t type) {
         case AST_LOOP: return "LOOP";
         case AST_COPY_CELL: return "COPY_CELL";
         case AST_SET_CONST: return "SET_CONST";
+        case AST_MUL: return "MUL";
         default: return "UNKNOWN";
     }
 }
@@ -128,6 +136,12 @@ void ast_print(ast_node_t *node, int indent) {
                 fprintf(stderr, " (value: %d)", node->data.basic.count);
             }
             break;
+        case AST_MUL:
+            fprintf(stderr, " (%d*[%d] -> [%d])",
+                   node->data.mul.multiplier,
+                   node->data.mul.src_offset,
+                   node->data.mul.dst_offset);
+            break;
         case AST_INPUT:
         case AST_OUTPUT:
             if (node->data.basic.offset != 0) {
@@ -150,6 +164,34 @@ void ast_print(ast_node_t *node, int indent) {
     }
 }
 
+// Helper function to detect multiplication loop pattern
+static bool is_multiplication_loop(ast_node_t *loop) {
+    if (loop->type != AST_LOOP || !loop->data.loop.body) return false;
+
+    ast_node_t *body = loop->data.loop.body;
+    bool has_counter_decrement = false;
+
+    for (ast_node_t *op = body; op; op = op->next) {
+        if (op->type == AST_ADD_VAL) {
+            if (op->data.basic.offset == 0) {
+                if (op->data.basic.count == -1 && !has_counter_decrement) {
+                    has_counter_decrement = true;
+                } else {
+                    return false; // Multiple or wrong counter modifications
+                }
+            }
+            // Other ADD_VAL offsets are allowed
+        } else if (op->type == AST_MOVE_PTR) {
+            // MOVE_PTR operations are allowed (they don't affect multiplication logic)
+            continue;
+        } else {
+            // Other operation types not allowed in multiplication loops
+            return false;
+        }
+    }
+
+    return has_counter_decrement;
+}
 
 // AST optimization - combine consecutive operations
 ast_node_t* ast_optimize(ast_node_t *node) {
@@ -255,7 +297,65 @@ ast_node_t* ast_optimize(ast_node_t *node) {
         node->data.basic.offset = 0;
     }
 
+    // Multiplication loop optimization: detect loops with only ADD_VAL operations
+    if (node->type == AST_LOOP && node->data.loop.body && is_multiplication_loop(node)) {
+        ast_node_t *loop_body = node->data.loop.body;
 
+        // CRITICAL: Capture the next node BEFORE we free loop_body
+        ast_node_t *original_next = node->next;
+
+        // Create individual MUL nodes for each ADD_VAL operation (except counter decrement)
+        ast_node_t *first_mul = NULL;
+        ast_node_t *last_mul = NULL;
+
+        for (ast_node_t *op = loop_body; op; op = op->next) {
+            if (op->type == AST_ADD_VAL && op->data.basic.offset != 0) {
+                ast_node_t *new_node;
+
+                if (op->data.basic.count == 1) {
+                    // Use COPY_CELL for multiplier = 1 (copy from source to destination)
+                    new_node = ast_create_copy_cell(0, op->data.basic.offset);
+                } else {
+                    // Use MUL for other multipliers
+                    new_node = ast_create_mul(op->data.basic.count, 0, op->data.basic.offset);
+                }
+
+                if (!first_mul) {
+                    first_mul = last_mul = new_node;
+                } else {
+                    last_mul->next = new_node;
+                    last_mul = new_node;
+                }
+            }
+        }
+
+        // Add SET_CONST(0) to clear the counter
+        ast_node_t *clear_counter = ast_create_set_const(0, 0);
+        if (last_mul) {
+            last_mul->next = clear_counter;
+        } else {
+            first_mul = clear_counter;
+        }
+        clear_counter->next = original_next;
+
+        // Free the original loop
+        ast_free(loop_body);
+
+        // Replace current node with first MUL node
+        if (first_mul) {
+            // Directly copy the node data (removing memset that might cause issues)
+            node->type = first_mul->type;
+            node->data = first_mul->data;
+            node->next = first_mul->next;
+            node->line = first_mul->line;
+            node->column = first_mul->column;
+
+            // Free only the first_mul node structure, not its contents
+            free(first_mul);
+        }
+
+        return ast_optimize(node);
+    }
 
     // Offset ADD optimization: detect MOVE_PTR + ADD_VAL + MOVE_PTR patterns
     if (node->type == AST_MOVE_PTR && node->next &&
@@ -276,7 +376,11 @@ ast_node_t* ast_optimize(ast_node_t *node) {
         free(third);
 
         // Replace current node
-        *node = *offset_add;
+        node->type = offset_add->type;
+        node->data = offset_add->data;
+        node->next = offset_add->next;
+        node->line = offset_add->line;
+        node->column = offset_add->column;
         free(offset_add);
 
         // Continue optimizing from current node

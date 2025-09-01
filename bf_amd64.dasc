@@ -14,16 +14,79 @@ static int getchar_wrapper(void) {
 }
 
 // AMD64-specific copy cell optimization (copy only, no clearing)
-static void compile_bf_copy_cell(dasm_State **Dst, int offset) {
+static void compile_bf_copy_cell(dasm_State **Dst, int src_offset, int dst_offset) {
     |  mov rax, [rsp+8]              // Load memory pointer
-    |  mov dl, [rax]                 // Load from source cell
-    if (offset >= -128 && offset <= 127) {
-        |  add [rax+offset], dl      // Add to destination cell at offset
+    
+    // Load from source cell
+    if (src_offset >= -128 && src_offset <= 127) {
+        |  mov dl, [rax+src_offset]  // Load from source cell at offset
     } else {
-        |  add rax, offset           // Add offset to pointer
+        |  add rax, src_offset       // Add src_offset to pointer
+        |  mov dl, [rax]             // Load from adjusted pointer
+        |  sub rax, src_offset       // Restore pointer
+    }
+    
+    // Add to destination cell
+    if (dst_offset >= -128 && dst_offset <= 127) {
+        |  add [rax+dst_offset], dl  // Add to destination cell at offset
+    } else {
+        |  add rax, dst_offset       // Add dst_offset to pointer
         |  add [rax], dl             // Add to destination cell
+        |  sub rax, dst_offset       // Restore pointer
     }
     // Note: Source cell clearing is now handled by explicit SET_CONST(0)
+}
+
+// AMD64-specific multiplication optimization
+static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int dst_offset) {
+    // Skip zero multiplier
+    if (multiplier == 0) return;
+    
+    // Load memory pointer and source value
+    |  mov rax, [rsp+8]         // Load memory pointer
+    
+    // Load from source cell
+    if (src_offset >= -128 && src_offset <= 127) {
+        |  mov cl, [rax+src_offset]  // Load from source cell at offset
+    } else {
+        |  add rax, src_offset       // Add src_offset to pointer
+        |  mov cl, [rax]             // Load from adjusted pointer
+        |  sub rax, src_offset       // Restore pointer
+    }
+    
+    if (multiplier == 1) {
+        // Optimized case: just add source to target
+        if (dst_offset >= -128 && dst_offset <= 127) {
+            |  add [rax+dst_offset], cl      // target += source
+        } else {
+            |  add rax, dst_offset           // adjust pointer
+            |  add [rax], cl                 // add source
+            |  sub rax, dst_offset           // restore pointer
+        }
+    } else if (multiplier == -1) {
+        // Optimized case: subtract source from target
+        if (dst_offset >= -128 && dst_offset <= 127) {
+            |  sub [rax+dst_offset], cl      // target -= source
+        } else {
+            |  add rax, dst_offset           // adjust pointer
+            |  sub [rax], cl                 // subtract source
+            |  sub rax, dst_offset           // restore pointer
+        }
+    } else {
+        // General case: target += source * multiplier
+        |  movzx edx, cl             // edx = source (zero-extend to 32-bit)
+        |  mov esi, multiplier       // esi = multiplier (use caller-saved ESI instead of EBX)
+        |  imul edx, esi             // edx = source * multiplier
+        if (dst_offset >= -128 && dst_offset <= 127) {
+            |  add [rax+dst_offset], dl      // target += product (use low 8 bits)
+        } else {
+            |  add rax, dst_offset           // adjust pointer
+            |  add [rax], dl                 // add product (use low 8 bits)
+            |  sub rax, dst_offset           // restore pointer
+        }
+    }
+    
+    // Note: Counter clearing is now handled by explicit SET_CONST(0) after MUL
 }
 
 static void compile_bf_prologue(dasm_State **Dst) {

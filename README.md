@@ -29,8 +29,12 @@ brew install luajit flex bison
 # Build native version (default - ARM64 on ARM64, AMD64 on AMD64)
 make
 
-# Build AMD64 macOS cross-compiled version
+# Build AMD64 macOS cross-compiled version  
 make amd64-darwin
+
+# Build AddressSanitizer debug versions
+make asan                    # Native ASan version
+make amd64-darwin-asan      # AMD64 ASan version (via Rosetta)
 
 # Clean build files
 make clean
@@ -57,10 +61,12 @@ make clean
 The compiler includes several AST-level optimizations:
 
 - **Run-length encoding**: Consecutive `+`, `-`, `>`, `<` operations are combined
-- **Loop optimizations**: `[-]` becomes direct cell clearing, `[-<+>]` becomes copy operations
-- **Multiplication loops**: Patterns like `++++[>+++<-]` become single multiplication operations
+- **Loop optimizations**: `[-]` becomes direct cell clearing (`SET_CONST(0)`)
+- **Copy operations**: `[-<+>]` becomes optimized copy cell operations with arbitrary offsets
+- **Multiplication loops**: Patterns like `++++[>+++<-]` become individual `MUL` and `COPY_CELL` operations
+- **Unified MUL/COPY**: `MUL` with multiplier=1 automatically uses more efficient `COPY_CELL`
 - **Offset operations**: `>+<` sequences become direct offset additions without pointer movement
-- **Constant propagation**: `[-]+++` becomes direct constant assignment
+- **Constant propagation**: `[-]+++` becomes direct constant assignment (`SET_CONST(3)`)
 
 ## Architecture Support
 
@@ -75,8 +81,8 @@ The compiler includes several AST-level optimizations:
 - Register-indirect function calls
 
 ```bash
-# AMD64 version (via Rosetta on ARM64 Macs)
-arch -x86_64 ./bf_amd64_darwin examples/hello.b
+# AMD64 version (automatically uses Rosetta on ARM64 Macs)
+./bf_amd64_darwin examples/hello.b
 ```
 
 ## Testing
@@ -84,10 +90,14 @@ arch -x86_64 ./bf_amd64_darwin examples/hello.b
 ### Local Testing
 ```bash
 # Test native version
-make test
+./bf examples/hello.b
 
 # Test AMD64 Darwin version (via Rosetta)
-make test-amd64-darwin
+./bf_amd64_darwin examples/hello.b
+
+# Test AddressSanitizer versions for debugging
+./bf_asan examples/hello.b                    # Native ASan
+./bf_amd64_darwin_asan examples/hello.b      # AMD64 ASan (via Rosetta)
 ```
 
 ## Docker Multi-Platform Support

@@ -1,7 +1,9 @@
 CC = gcc
 CC_X64_MACOS = clang
-CFLAGS = -Wall -Wextra -O2 -std=c99
-CFLAGS_X64_MACOS = -target x86_64-apple-macos10.12 -Wall -Wextra -O2 -std=c99
+CFLAGS = -Wall -Wextra -O2 -g -std=c99
+CFLAGS_X64_MACOS = -target x86_64-apple-macos10.12 -Wall -Wextra -O2 -g -std=c99
+CFLAGS_X64_ASAN = -target x86_64-apple-macos10.12 -Wall -Wextra -O2 -g -fsanitize=address -std=c99
+CFLAGS_ASAN = -Wall -Wextra -O2 -g -fsanitize=address -std=c99
 LUAJIT = luajit
 LUA_DOCKER = lua5.1
 
@@ -13,6 +15,8 @@ YACC = $(BREW_BISON)
 
 TARGET = bf
 TARGET_AMD64_DARWIN = bf_amd64_darwin
+TARGET_AMD64_DARWIN_ASAN = bf_amd64_darwin_asan
+TARGET_ASAN = bf_asan
 DYNASM_DIR = luajit/dynasm
 MAIN_C = bf.c
 DYNASM_DASC_ARM64 = bf_arm64.dasc
@@ -31,8 +35,9 @@ AST_C = bf_ast.c
 AST_H = bf_ast.h
 
 all: $(TARGET)
-
+asan: $(TARGET_ASAN)
 amd64-darwin: $(TARGET_AMD64_DARWIN)
+amd64-darwin-asan: $(TARGET_AMD64_DARWIN_ASAN)
 
 $(DYNASM_DIR):
 	@if [ ! -d "luajit" ]; then \
@@ -64,26 +69,24 @@ $(ARCH_C_AMD64): $(DYNASM_DASC_AMD64) $(DYNASM_DIR)
 ifeq ($(shell uname -m),x86_64)
 $(TARGET): $(ARCH_C_AMD64) $(MAIN_C) $(PARSER_C) $(LEXER_C) $(AST_C)
 	$(CC) $(CFLAGS) -I$(DYNASM_DIR) -o $(TARGET) $(MAIN_C) $(PARSER_C) $(LEXER_C) $(AST_C)
+
+$(TARGET_ASAN): $(ARCH_C_AMD64) $(MAIN_C) $(PARSER_C) $(LEXER_C) $(AST_C)
+	$(CC) $(CFLAGS_ASAN) -I$(DYNASM_DIR) -o $(TARGET_ASAN) $(MAIN_C) $(PARSER_C) $(LEXER_C) $(AST_C)
 else ifeq ($(shell uname -m),aarch64)
 $(TARGET): $(ARCH_C_ARM64) $(MAIN_C) $(PARSER_C) $(LEXER_C) $(AST_C)
 	$(CC) $(CFLAGS) -I$(DYNASM_DIR) -o $(TARGET) $(MAIN_C) $(PARSER_C) $(LEXER_C) $(AST_C)
-else
-$(TARGET): $(ARCH_C_ARM64) $(MAIN_C) $(PARSER_C) $(LEXER_C) $(AST_C)
-	$(CC) $(CFLAGS) -I$(DYNASM_DIR) -o $(TARGET) $(MAIN_C) $(PARSER_C) $(LEXER_C) $(AST_C)
+
+$(TARGET_ASAN): $(ARCH_C_ARM64) $(MAIN_C) $(PARSER_C) $(LEXER_C) $(AST_C)
+	$(CC) $(CFLAGS_ASAN) -I$(DYNASM_DIR) -o $(TARGET_ASAN) $(MAIN_C) $(PARSER_C) $(LEXER_C) $(AST_C)
 endif
 
 $(TARGET_AMD64_DARWIN): $(ARCH_C_AMD64) $(MAIN_C)
 	$(CC_X64_MACOS) $(CFLAGS_X64_MACOS) -I$(DYNASM_DIR) -o $(TARGET_AMD64_DARWIN) $(MAIN_C) $(PARSER_C) $(LEXER_C) $(AST_C)
 
+$(TARGET_AMD64_DARWIN_ASAN): $(ARCH_C_AMD64) $(MAIN_C) $(PARSER_C) $(LEXER_C) $(AST_C)
+	$(CC_X64_MACOS) $(CFLAGS_X64_ASAN) -I$(DYNASM_DIR) -o $(TARGET_AMD64_DARWIN_ASAN) $(MAIN_C) $(PARSER_C) $(LEXER_C) $(AST_C)
+
 clean:
 	rm -f $(TARGET) $(TARGET_AMD64_DARWIN) $(ARCH_C_ARM64) $(ARCH_C_AMD64) $(PARSER_C) $(PARSER_H) $(LEXER_C)
 
-test: $(TARGET)
-	@echo "Testing native version..."
-	./$(TARGET) examples/hello.b
-
-test-amd64-darwin: $(TARGET_AMD64_DARWIN)
-	@echo "Testing AMD64 Darwin version (via Rosetta)..."
-	arch -x86_64 ./$(TARGET_AMD64_DARWIN) examples/hello.b
-
-.PHONY: all clean test test-amd64-darwin amd64-darwin
+.PHONY: all clean amd64-darwin amd64-darwin-asan asan

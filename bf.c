@@ -105,6 +105,10 @@ static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label
         case AST_SET_CONST:
             compile_bf_set_const(Dst, node->data.basic.count, node->data.basic.offset);
             break;
+
+        case AST_MUL:
+            compile_bf_mul(Dst, node->data.mul.multiplier, node->data.mul.src_offset, node->data.mul.dst_offset);
+            break;
     }
 
     // Continue with next node
@@ -213,8 +217,8 @@ int main(int argc, char *argv[]) {
 
     // Optimize the AST if optimizations are enabled
     if (optimize) {
-        ast = ast_optimize(ast);
         ast = ast_rewrite_sequences(ast);
+        ast = ast_optimize(ast);
     }
 
     if (debug_mode) {
