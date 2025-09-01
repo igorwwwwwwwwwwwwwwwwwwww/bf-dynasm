@@ -202,13 +202,14 @@ int main(int argc, char *argv[]) {
             optimize = false;
             arg_offset++;
         } else if (strcmp(argv[i], "--profile") == 0) {
-            profile_mode = true;
-            arg_offset++;
-            if (i + 1 < argc && argv[i + 1][0] != '-') {
-                profile_output = argv[i + 1];
-                i++;
-                arg_offset++;
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --profile requires a filename\n");
+                return 1;
             }
+            profile_mode = true;
+            profile_output = argv[i + 1];
+            i++;
+            arg_offset += 2;
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             show_help = true;
             arg_offset++;
@@ -226,7 +227,7 @@ int main(int argc, char *argv[]) {
         fprintf(stream, "  --help, -h        Show this help message\n");
         fprintf(stream, "  --debug           Enable debug mode (dump AST and compiled code)\n");
         fprintf(stream, "  --no-optimize     Disable AST optimizations\n");
-        fprintf(stream, "  --profile [file]  Enable profiling (output to file, or stderr if no file)\n");
+        fprintf(stream, "  --profile file    Enable profiling (output to file)\n");
         fprintf(stream, "\nExamples:\n");
         fprintf(stream, "  %s examples/hello.b\n", argv[0]);
         fprintf(stream, "  %s --debug examples/fizzbuzz.b\n", argv[0]);
@@ -289,21 +290,22 @@ int main(int argc, char *argv[]) {
     if (profile_mode) {
         bf_prof_stop(&profiler);
 
-        FILE *prof_out = stderr;
-        if (profile_output) {
-            prof_out = fopen(profile_output, "w");
-            if (!prof_out) {
-                fprintf(stderr, "Warning: Could not open profile output file '%s', using stderr\n", profile_output);
-                prof_out = stderr;
-            }
+        FILE *prof_out = fopen(profile_output, "w");
+        if (!prof_out) {
+            fprintf(stderr, "Error: Could not open profile output file '%s'\n", profile_output);
+            bf_prof_cleanup(&profiler);
+            if (debug_ptr) bf_debug_cleanup(debug_ptr);
+            free(program);
+            free(memory);
+            if (ast) ast_free(ast);
+            return 1;
         }
 
         bf_prof_dump_with_debug(&profiler, prof_out, debug_ptr);
+        bf_prof_print_heat_ast(&profiler, debug_ptr, ast, prof_out);
 
-        if (prof_out != stderr) {
-            fclose(prof_out);
-            fprintf(stderr, "Profile data written to: %s\n", profile_output);
-        }
+        fclose(prof_out);
+        fprintf(stderr, "Profile data written to: %s\n", profile_output);
 
         bf_prof_cleanup(&profiler);
     }

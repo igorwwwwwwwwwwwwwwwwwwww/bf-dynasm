@@ -156,3 +156,112 @@ void bf_prof_cleanup(bf_profiler_t *prof) {
     prof->sample_count = 0;
     prof->max_samples = 0;
 }
+
+static int count_samples_for_location(bf_profiler_t *prof, bf_debug_info_t *debug, int line, int column) {
+    int count = 0;
+    for (int i = 0; i < prof->sample_count; i++) {
+        debug_map_entry_t *entry = bf_debug_find_by_pc(debug, prof->samples[i].pc);
+        if (entry && entry->source_line == line && entry->source_column == column) {
+            count++;
+        }
+    }
+    return count;
+}
+
+static void print_heat_indicator(int sample_count, int max_samples, FILE *out) {
+    if (max_samples == 0) {
+        return;
+    }
+
+    double heat_ratio = (double)sample_count / max_samples;
+
+    if (heat_ratio >= 0.8) {
+        fprintf(out, " \033[41m🔥HOT\033[0m");  // Red background
+    } else if (heat_ratio >= 0.5) {
+        fprintf(out, " \033[43m🔥WARM\033[0m"); // Yellow background
+    } else if (heat_ratio >= 0.2) {
+        fprintf(out, " \033[42m📊\033[0m");     // Green background
+    } else if (sample_count > 0) {
+        fprintf(out, " \033[44m💤\033[0m");     // Blue background
+    }
+
+    if (sample_count > 0) {
+        fprintf(out, "(%d)", sample_count);
+    }
+}
+
+static void print_heat_ast_node(ast_node_t *node, int indent, bf_profiler_t *prof, bf_debug_info_t *debug, int max_samples, FILE *out) {
+    if (!node) return;
+
+    for (int i = 0; i < indent; i++) fprintf(out, "  ");
+
+    fprintf(out, "%s", debug_node_type_name(node->type));
+
+    if (node->line > 0 || node->column > 0) {
+        fprintf(out, " @%d:%d", node->line, node->column);
+
+        int sample_count = count_samples_for_location(prof, debug, node->line, node->column);
+        print_heat_indicator(sample_count, max_samples, out);
+    }
+
+    switch (node->type) {
+        case AST_MOVE_PTR:
+            if (node->data.basic.count != 0) fprintf(out, " (count: %d)", node->data.basic.count);
+            break;
+        case AST_ADD_VAL:
+            fprintf(out, " (count: %d, offset: %d)", node->data.basic.count, node->data.basic.offset);
+            break;
+        case AST_INPUT:
+        case AST_OUTPUT:
+            if (node->data.basic.offset != 0) fprintf(out, " (offset: %d)", node->data.basic.offset);
+            break;
+        case AST_SET_CONST:
+            fprintf(out, " (value: %d, offset: %d)", node->data.basic.count, node->data.basic.offset);
+            break;
+        case AST_COPY_CELL:
+            fprintf(out, " (src: %d, dst: %d)", node->data.copy.src_offset, node->data.copy.dst_offset);
+            break;
+        case AST_MUL:
+            fprintf(out, " (mul: %d, src: %d, dst: %d)",
+                   node->data.mul.multiplier, node->data.mul.src_offset, node->data.mul.dst_offset);
+            break;
+        case AST_LOOP:
+            break;
+    }
+    fprintf(out, "\n");
+
+    if (node->type == AST_LOOP && node->data.loop.body) {
+        print_heat_ast_node(node->data.loop.body, indent + 1, prof, debug, max_samples, out);
+    }
+
+    if (node->next) {
+        print_heat_ast_node(node->next, indent, prof, debug, max_samples, out);
+    }
+}
+
+void bf_prof_print_heat_ast(bf_profiler_t *prof, void *debug_ptr, void *ast_ptr, FILE *out) {
+    bf_debug_info_t *debug = (bf_debug_info_t *)debug_ptr;
+    ast_node_t *ast = (ast_node_t *)ast_ptr;
+
+    if (!prof || !debug || !ast) {
+        fprintf(out, "Error: Missing profiler, debug info, or AST data\n");
+        return;
+    }
+
+    // Find max sample count for any location for heat scaling
+    int max_samples = 0;
+    for (int i = 0; i < debug->entry_count; i++) {
+        debug_map_entry_t *entry = &debug->entries[i];
+        int count = count_samples_for_location(prof, debug, entry->source_line, entry->source_column);
+        if (count > max_samples) {
+            max_samples = count;
+        }
+    }
+
+    fprintf(out, "\n=== HEAT MAP AST (Total samples: %d, Max per location: %d) ===\n",
+           prof->sample_count, max_samples);
+    fprintf(out, "Legend: \033[41mHOT\033[0m(≥80%%) \033[43mWARM\033[0m(≥50%%) \033[42mCOOL\033[0m(≥20%%) \033[44mLOW\033[0m(<20%%)\n\n");
+
+    print_heat_ast_node(ast, 0, prof, debug, max_samples, out);
+    fprintf(out, "\n");
+}

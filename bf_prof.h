@@ -35,4 +35,7 @@ void bf_prof_dump(bf_profiler_t *prof, FILE *out);
 void bf_prof_dump_with_debug(bf_profiler_t *prof, FILE *out, void *debug);
 void bf_prof_cleanup(bf_profiler_t *prof);
 
+// Heat map AST printing
+void bf_prof_print_heat_ast(bf_profiler_t *prof, void *debug, void *ast, FILE *out);
+
 #endif // BF_PROF_H
