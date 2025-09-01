@@ -8,6 +8,12 @@ luajit/
 # Object files
 *.o
 
+# Debug symbols
+*.dSYM/
+
+# Sanitizer builds
+*_asan
+
 # Generated parser/lexer files
 bf_lexer.c
 bf_lexer.h

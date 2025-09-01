@@ -57,6 +57,9 @@ ast_node_t* ast_create_mul(int multiplier, int src_offset, int dst_offset);
 // AST manipulation
 void ast_free(ast_node_t *node);
 void ast_print(ast_node_t *node, int indent);
+int ast_count_nodes(ast_node_t *node);
+void ast_set_location(ast_node_t *node, int line, int column);
+void ast_copy_location(ast_node_t *dst, ast_node_t *src);
 ast_node_t* ast_optimize(ast_node_t *node);
 ast_node_t* ast_rewrite_sequences(ast_node_t *node);
 

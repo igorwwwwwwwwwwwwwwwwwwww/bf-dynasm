@@ -5,9 +5,12 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <assert.h>
+#include <stdbool.h>
 
 #include "dasm_proto.h"
 #include "bf_ast.h"
+#include "bf_prof.h"
+#include "bf_debug.h"
 
 #include "bf_parser.h"
 
@@ -66,9 +69,14 @@ static void dump_code_hex(void *code, size_t size) {
     fprintf(stderr, "\n");
 }
 
-// Direct AST compilation with access to static DynASM functions
-static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label) {
+static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label, bf_debug_info_t *debug, int *debug_label) {
     if (!node) return next_label;
+
+    if (debug && debug_label) {
+        int current_debug_label = (*debug_label)++;
+        bf_debug_add_mapping(debug, current_debug_label, node, node->line, node->column);
+        compile_bf_debug_label(Dst, current_debug_label);
+    }
 
     switch (node->type) {
         case AST_MOVE_PTR:
@@ -92,7 +100,7 @@ static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label
             int end_label = next_label++;
             compile_bf_loop_start(Dst, end_label);
             compile_bf_label(Dst, start_label);
-            next_label = ast_compile_direct(node->data.loop.body, Dst, next_label);
+            next_label = ast_compile_direct(node->data.loop.body, Dst, next_label, debug, debug_label);
             compile_bf_loop_end(Dst, start_label);
             compile_bf_label(Dst, end_label);
             break;
@@ -113,31 +121,28 @@ static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label
 
     // Continue with next node
     if (node->next) {
-        next_label = ast_compile_direct(node->next, Dst, next_label);
+        next_label = ast_compile_direct(node->next, Dst, next_label, debug, debug_label);
     }
 
     return next_label;
 }
 
-static bf_func compile_bf_ast(ast_node_t *ast, int debug_mode) {
+static bf_func compile_bf_ast(ast_node_t *ast, bool debug_mode, void **code_ptr, size_t *code_size, bf_debug_info_t *debug_info) {
     dasm_State *state = NULL;
     dasm_State **Dst = &state;
     dasm_init(Dst, 1);
     dasm_setup(Dst, actions);
 
-    // Allocate enough PC labels for nested loops
-    dasm_growpc(Dst, MAX_NESTING * 2);
+    int debug_label_count = debug_info ? ast_count_nodes(ast) : 0;
+    dasm_growpc(Dst, MAX_NESTING * 2 + debug_label_count);
 
-    // Architecture-specific prologue
     compile_bf_prologue(Dst);
 
-    // Compile the AST (starting with label 0)
-    ast_compile_direct(ast, Dst, 0);
+    int debug_label_counter = MAX_NESTING * 2; // Start debug labels after loop labels
+    ast_compile_direct(ast, Dst, 0, debug_info, debug_info ? &debug_label_counter : NULL);
 
-    // Architecture-specific epilogue
     compile_bf_epilogue(Dst);
 
-    // Link and encode
     size_t size;
     int ret = dasm_link(Dst, &size);
     if (ret != 0) {
@@ -149,12 +154,22 @@ static bf_func compile_bf_ast(ast_node_t *ast, int debug_mode) {
         bf_error("Memory mapping failed");
     }
 
+    // Resolve debug labels BEFORE encoding - after this dasm_getpclabel corrupts state
+    if (debug_info) {
+        for (int i = 0; i < debug_info->entry_count; i++) {
+            debug_map_entry_t *entry = &debug_info->entries[i];
+            int32_t ofs = dasm_getpclabel(Dst, entry->pc_label);
+            if (ofs >= 0) {
+                entry->pc_offset = (size_t)ofs;
+            }
+        }
+    }
+
     ret = dasm_encode(Dst, code);
     if (ret != 0) {
         bf_error("DynASM encoding failed");
     }
 
-    // Make code executable
     if (mprotect(code, size, PROT_READ | PROT_EXEC) != 0) {
         bf_error("Memory protection failed");
     }
@@ -163,27 +178,39 @@ static bf_func compile_bf_ast(ast_node_t *ast, int debug_mode) {
         dump_code_hex(code, size);
     }
 
+    if (code_ptr) *code_ptr = code;
+    if (code_size) *code_size = size;
+
     dasm_free(Dst);
     return (bf_func)code;
 }
 
 
 int main(int argc, char *argv[]) {
-    int debug_mode = 0;
-    int optimize = 1;
-    int show_help = 0;
+    bool debug_mode = false;
+    bool optimize = true;
+    bool show_help = false;
+    bool profile_mode = false;
+    const char *profile_output = NULL;
     int arg_offset = 1;
 
-    // Parse flags
     for (int i = 1; i < argc && argv[i][0] == '-'; i++) {
         if (strcmp(argv[i], "--debug") == 0) {
-            debug_mode = 1;
+            debug_mode = true;
             arg_offset++;
         } else if (strcmp(argv[i], "--no-optimize") == 0) {
-            optimize = 0;
+            optimize = false;
             arg_offset++;
+        } else if (strcmp(argv[i], "--profile") == 0) {
+            profile_mode = true;
+            arg_offset++;
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                profile_output = argv[i + 1];
+                i++;
+                arg_offset++;
+            }
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-            show_help = 1;
+            show_help = true;
             arg_offset++;
             break;
         } else {
@@ -199,10 +226,12 @@ int main(int argc, char *argv[]) {
         fprintf(stream, "  --help, -h        Show this help message\n");
         fprintf(stream, "  --debug           Enable debug mode (dump AST and compiled code)\n");
         fprintf(stream, "  --no-optimize     Disable AST optimizations\n");
+        fprintf(stream, "  --profile [file]  Enable profiling (output to file, or stderr if no file)\n");
         fprintf(stream, "\nExamples:\n");
         fprintf(stream, "  %s examples/hello.b\n", argv[0]);
         fprintf(stream, "  %s --debug examples/fizzbuzz.b\n", argv[0]);
         fprintf(stream, "  %s --no-optimize examples/mandelbrot.b\n", argv[0]);
+        fprintf(stream, "  %s --profile profile.txt examples/mandelbrot.b\n", argv[0]);
         return show_help ? 0 : 1;
     }
 
@@ -212,10 +241,8 @@ int main(int argc, char *argv[]) {
     bf_func compiled_program;
     ast_node_t *ast = NULL;
 
-    // Parse program into AST
     ast = parse_bf_program(program);
 
-    // Optimize the AST if optimizations are enabled
     if (optimize) {
         ast = ast_rewrite_sequences(ast);
         ast = ast_optimize(ast);
@@ -226,13 +253,64 @@ int main(int argc, char *argv[]) {
         ast_print(ast, 0);
     }
 
-    compiled_program = compile_bf_ast(ast, debug_mode);
+    bf_debug_info_t debug_info;
+    bf_debug_info_t *debug_ptr = NULL;
+    if (profile_mode) {
+        debug_ptr = &debug_info;
+        if (bf_debug_init(debug_ptr, NULL, 0) != 0) {
+            bf_error("Failed to initialize debug info");
+        }
+    }
+
+    void *code_ptr = NULL;
+    size_t code_size = 0;
+    compiled_program = compile_bf_ast(ast, debug_mode, &code_ptr, &code_size, debug_ptr);
+
+    if (debug_ptr) {
+        debug_ptr->code_start = code_ptr;
+        debug_ptr->code_size = code_size;
+    }
+
+    bf_profiler_t profiler;
+    if (profile_mode) {
+        if (bf_prof_init(&profiler, code_ptr, code_size) != 0) {
+            bf_error("Failed to initialize profiler");
+        }
+        bf_prof_start(&profiler);
+    }
 
     char *memory = calloc(BF_MEMORY_SIZE, 1);
     if (!memory) {
         bf_error("Memory allocation failed");
     }
+
     compiled_program(memory);
+
+    if (profile_mode) {
+        bf_prof_stop(&profiler);
+
+        FILE *prof_out = stderr;
+        if (profile_output) {
+            prof_out = fopen(profile_output, "w");
+            if (!prof_out) {
+                fprintf(stderr, "Warning: Could not open profile output file '%s', using stderr\n", profile_output);
+                prof_out = stderr;
+            }
+        }
+
+        bf_prof_dump_with_debug(&profiler, prof_out, debug_ptr);
+
+        if (prof_out != stderr) {
+            fclose(prof_out);
+            fprintf(stderr, "Profile data written to: %s\n", profile_output);
+        }
+
+        bf_prof_cleanup(&profiler);
+    }
+
+    if (debug_ptr) {
+        bf_debug_cleanup(debug_ptr);
+    }
 
     free(program);
     free(memory);

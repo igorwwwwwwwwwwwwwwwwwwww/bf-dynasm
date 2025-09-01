@@ -2,7 +2,6 @@
 #include <string.h>
 #include <stdbool.h>
 
-// AST node creation functions
 ast_node_t* ast_create_node(ast_node_type_t type) {
     ast_node_t *node = calloc(1, sizeof(ast_node_t));
     if (!node) {
@@ -48,7 +47,6 @@ ast_node_t* ast_create_sequence(ast_node_t *first, ast_node_t *second) {
     if (!first) return second;
     if (!second) return first;
 
-    // Find the last node in the first chain and append second to it
     ast_node_t *current = first;
     while (current->next) {
         current = current->next;
@@ -57,7 +55,6 @@ ast_node_t* ast_create_sequence(ast_node_t *first, ast_node_t *second) {
     return first;
 }
 
-// Optimized AST node creation
 
 ast_node_t* ast_create_copy_cell(int src_offset, int dst_offset) {
     ast_node_t *node = ast_create_node(AST_COPY_CELL);
@@ -81,7 +78,6 @@ ast_node_t* ast_create_mul(int multiplier, int src_offset, int dst_offset) {
     return node;
 }
 
-// Memory management
 void ast_free(ast_node_t *node) {
     if (!node) return;
 
@@ -92,7 +88,6 @@ void ast_free(ast_node_t *node) {
     free(node);
 }
 
-// Pretty printing for debugging
 static const char* ast_type_name(ast_node_type_t type) {
     switch (type) {
         case AST_MOVE_PTR: return "MOVE_PTR";
@@ -113,6 +108,9 @@ void ast_print(ast_node_t *node, int indent) {
     for (int i = 0; i < indent; i++) fprintf(stderr, "  ");
 
     fprintf(stderr, "%s", ast_type_name(node->type));
+    if (node->line > 0 || node->column > 0) {
+        fprintf(stderr, " @%d:%d", node->line, node->column);
+    }
     switch (node->type) {
         case AST_MOVE_PTR:
             if (node->data.basic.count != 0) fprintf(stderr, " (count: %d)", node->data.basic.count);
@@ -153,18 +151,15 @@ void ast_print(ast_node_t *node, int indent) {
     }
     fprintf(stderr, "\n");
 
-    // For loops, print the body with increased indentation
     if (node->type == AST_LOOP && node->data.loop.body) {
         ast_print(node->data.loop.body, indent + 1);
     }
 
-    // For all nodes, continue with the next node at same level
     if (node->next) {
         ast_print(node->next, indent);
     }
 }
 
-// Helper function to detect multiplication loop pattern
 static bool is_multiplication_loop(ast_node_t *loop) {
     if (loop->type != AST_LOOP || !loop->data.loop.body) return false;
 
@@ -180,12 +175,9 @@ static bool is_multiplication_loop(ast_node_t *loop) {
                     return false; // Multiple or wrong counter modifications
                 }
             }
-            // Other ADD_VAL offsets are allowed
         } else if (op->type == AST_MOVE_PTR) {
-            // MOVE_PTR operations are allowed (they don't affect multiplication logic)
             continue;
         } else {
-            // Other operation types not allowed in multiplication loops
             return false;
         }
     }
@@ -193,36 +185,30 @@ static bool is_multiplication_loop(ast_node_t *loop) {
     return has_counter_decrement;
 }
 
-// AST optimization - combine consecutive operations
 ast_node_t* ast_optimize(ast_node_t *node) {
     if (!node) return NULL;
 
     // Run-length encoding: combine consecutive ADD_VAL or MOVE_PTR operations FIRST
     if (node->next && node->type == node->next->type) {
         if (node->type == AST_MOVE_PTR) {
-            // MOVE_PTR operations can always be combined
             node->data.basic.count += node->next->data.basic.count;
             ast_node_t *old_next = node->next;
             node->next = node->next->next;
             free(old_next);
 
-            // Continue optimizing from current node (might combine further)
             return ast_optimize(node);
         } else if (node->type == AST_ADD_VAL &&
                    node->data.basic.offset == node->next->data.basic.offset) {
-            // ADD_VAL operations can only be combined if they have the same offset
             node->data.basic.count += node->next->data.basic.count;
             ast_node_t *old_next = node->next;
             node->next = node->next->next;
             free(old_next);
 
-            // Continue optimizing from current node (might combine further)
             return ast_optimize(node);
         }
     }
 
-    // Copy loop optimization: detect copy patterns BEFORE recursive optimization
-    // This must come before child optimization to catch the original MOVE_PTR patterns
+    // Copy loop optimization: detect copy patterns before recursive optimization
     if (node->type == AST_LOOP && node->data.loop.body) {
         ast_node_t *curr = node->data.loop.body;
 
@@ -239,13 +225,14 @@ ast_node_t* ast_optimize(ast_node_t *node) {
             // Replace with copy cell operation followed by explicit clear
             ast_free(node->data.loop.body);
 
-            // Create COPY_CELL (copy only, no clear)
+            // Create COPY_CELL (copy only, no clear) - preserve location from original loop
             node->type = AST_COPY_CELL;
             node->data.copy.src_offset = 0;   // src is current position
             node->data.copy.dst_offset = offset;  // dst is at offset
 
             // Create SET_CONST(0) for explicit clearing and chain it
             ast_node_t *clear_node = ast_create_set_const(0, 0);
+            ast_copy_location(clear_node, node); // Copy location from loop to clear
             node->next = ast_create_sequence(clear_node, node->next);
 
             // Continue optimizing from current node
@@ -264,13 +251,14 @@ ast_node_t* ast_optimize(ast_node_t *node) {
             // Replace with copy cell operation followed by explicit clear
             ast_free(node->data.loop.body);
 
-            // Create COPY_CELL (copy only, no clear)
+            // Create COPY_CELL (copy only, no clear) - preserve location from original loop
             node->type = AST_COPY_CELL;
             node->data.copy.src_offset = 0;   // src is current position
             node->data.copy.dst_offset = offset;  // dst is at offset
 
             // Create SET_CONST(0) for explicit clearing and chain it
             ast_node_t *clear_node = ast_create_set_const(0, 0);
+            ast_copy_location(clear_node, node); // Copy location from loop to clear
             node->next = ast_create_sequence(clear_node, node->next);
 
             // Continue optimizing from current node
@@ -290,11 +278,12 @@ ast_node_t* ast_optimize(ast_node_t *node) {
     if (node->type == AST_LOOP && node->data.loop.body &&
         node->data.loop.body->type == AST_ADD_VAL && node->data.loop.body->data.basic.count == -1 &&
         !node->data.loop.body->next) {
-        // Replace loop with set constant zero operation
+        // Replace loop with set constant zero operation - preserve location
         ast_free(node->data.loop.body);
         node->type = AST_SET_CONST;
         node->data.basic.count = 0;
         node->data.basic.offset = 0;
+        // Location is already preserved in node
     }
 
     // Multiplication loop optimization: detect loops with only ADD_VAL operations
@@ -320,6 +309,9 @@ ast_node_t* ast_optimize(ast_node_t *node) {
                     new_node = ast_create_mul(op->data.basic.count, 0, op->data.basic.offset);
                 }
 
+                // Preserve location from original loop
+                ast_copy_location(new_node, node);
+
                 if (!first_mul) {
                     first_mul = last_mul = new_node;
                 } else {
@@ -331,6 +323,7 @@ ast_node_t* ast_optimize(ast_node_t *node) {
 
         // Add SET_CONST(0) to clear the counter
         ast_node_t *clear_counter = ast_create_set_const(0, 0);
+        ast_copy_location(clear_counter, node); // Preserve location from original loop
         if (last_mul) {
             last_mul->next = clear_counter;
         } else {
@@ -369,6 +362,7 @@ ast_node_t* ast_optimize(ast_node_t *node) {
 
         // Create ADD_VAL node with offset
         ast_node_t *offset_add = ast_create_add(value, offset);
+        ast_copy_location(offset_add, node); // Preserve location from first node
         offset_add->next = third->next;
 
         // Free the three nodes we're replacing
@@ -444,11 +438,17 @@ ast_node_t* ast_rewrite_sequences(ast_node_t *node) {
         // If we have a block with pointer movements, rewrite it
         if (block_start != block_end && has_ptr_movements) {
             ast_node_t *rewrite_current = block_start;
+            ast_node_t *first_move_node = NULL; // Track first MOVE_PTR for location
             current_offset = 0;
 
             while (rewrite_current && rewrite_current != original_next) {
                 if (rewrite_current->type == AST_MOVE_PTR) {
                     current_offset += rewrite_current->data.basic.count;
+
+                    // Remember the first MOVE_PTR node for source location
+                    if (!first_move_node) {
+                        first_move_node = rewrite_current;
+                    }
 
                     // Mark this MOVE_PTR for removal by setting count to 0
                     rewrite_current->data.basic.count = 0;
@@ -477,6 +477,9 @@ ast_node_t* ast_rewrite_sequences(ast_node_t *node) {
             // Add a single MOVE_PTR at the end if needed
             if (total_ptr_movement != 0) {
                 ast_node_t *final_move = ast_create_move(total_ptr_movement);
+                if (first_move_node) {
+                    ast_copy_location(final_move, first_move_node);
+                }
                 final_move->next = original_next;
                 block_end->next = final_move;
             }
@@ -518,4 +521,36 @@ ast_node_t* ast_rewrite_sequences(ast_node_t *node) {
     }
 
     return node;
+}
+
+int ast_count_nodes(ast_node_t *node) {
+    if (!node) return 0;
+
+    int count = 1; // Count current node
+
+    // Count nodes in loop body if this is a loop
+    if (node->type == AST_LOOP && node->data.loop.body) {
+        count += ast_count_nodes(node->data.loop.body);
+    }
+
+    // Count next node in sequence
+    if (node->next) {
+        count += ast_count_nodes(node->next);
+    }
+
+    return count;
+}
+
+void ast_set_location(ast_node_t *node, int line, int column) {
+    if (node) {
+        node->line = line;
+        node->column = column;
+    }
+}
+
+void ast_copy_location(ast_node_t *dst, ast_node_t *src) {
+    if (dst && src) {
+        dst->line = src->line;
+        dst->column = src->column;
+    }
 }

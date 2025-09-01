@@ -16,7 +16,7 @@ static int getchar_wrapper(void) {
 // AMD64-specific copy cell optimization (copy only, no clearing)
 static void compile_bf_copy_cell(dasm_State **Dst, int src_offset, int dst_offset) {
     |  mov rax, [rsp+8]              // Load memory pointer
-    
+
     // Load from source cell
     if (src_offset >= -128 && src_offset <= 127) {
         |  mov dl, [rax+src_offset]  // Load from source cell at offset
@@ -25,7 +25,7 @@ static void compile_bf_copy_cell(dasm_State **Dst, int src_offset, int dst_offse
         |  mov dl, [rax]             // Load from adjusted pointer
         |  sub rax, src_offset       // Restore pointer
     }
-    
+
     // Add to destination cell
     if (dst_offset >= -128 && dst_offset <= 127) {
         |  add [rax+dst_offset], dl  // Add to destination cell at offset
@@ -41,10 +41,10 @@ static void compile_bf_copy_cell(dasm_State **Dst, int src_offset, int dst_offse
 static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int dst_offset) {
     // Skip zero multiplier
     if (multiplier == 0) return;
-    
+
     // Load memory pointer and source value
     |  mov rax, [rsp+8]         // Load memory pointer
-    
+
     // Load from source cell
     if (src_offset >= -128 && src_offset <= 127) {
         |  mov cl, [rax+src_offset]  // Load from source cell at offset
@@ -53,7 +53,7 @@ static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int
         |  mov cl, [rax]             // Load from adjusted pointer
         |  sub rax, src_offset       // Restore pointer
     }
-    
+
     if (multiplier == 1) {
         // Optimized case: just add source to target
         if (dst_offset >= -128 && dst_offset <= 127) {
@@ -85,7 +85,7 @@ static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int
             |  sub rax, dst_offset           // restore pointer
         }
     }
-    
+
     // Note: Counter clearing is now handled by explicit SET_CONST(0) after MUL
 }
 
@@ -117,6 +117,11 @@ static void compile_bf_loop_end(dasm_State **Dst, int back_to_start) {
 
 static void compile_bf_label(dasm_State **Dst, int label) {
     |=>(label):
+}
+
+// Debug label for PC mapping
+static void compile_bf_debug_label(dasm_State **Dst, int debug_label) {
+    |=>(debug_label):
 }
 
 // AST-based compilation wrapper functions

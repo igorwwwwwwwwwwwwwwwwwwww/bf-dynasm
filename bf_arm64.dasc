@@ -39,11 +39,11 @@ static void compile_bf_copy_cell(dasm_State **Dst, int src_offset, int dst_offse
     // Note: Source cell clearing is now handled by explicit SET_CONST(0)
 }
 
-// ARM64-specific multiplication optimization  
+// ARM64-specific multiplication optimization
 static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int dst_offset) {
     // Skip zero multiplier
     if (multiplier == 0) return;
-    
+
     // Load source value
     if (src_offset >= -256 && src_offset <= 255) {
         |  ldrb w0, [x19, #src_offset]   // Load from source cell at offset
@@ -52,7 +52,7 @@ static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int
         |  ldrb w0, [x19]                // Load from adjusted pointer
         |  sub x19, x19, #src_offset     // Restore pointer
     }
-    
+
     // Compute target address in x16 (caller-saved)
     if (dst_offset >= 0) {
         |  add x16, x19, #dst_offset
@@ -92,6 +92,11 @@ static void compile_bf_loop_end(dasm_State **Dst, int back_to_start) {
 
 static void compile_bf_label(dasm_State **Dst, int label) {
     |=>(label):
+}
+
+// Debug label for PC mapping
+static void compile_bf_debug_label(dasm_State **Dst, int debug_label) {
+    |=>(debug_label):
 }
 
 // AST-based compilation wrapper functions
