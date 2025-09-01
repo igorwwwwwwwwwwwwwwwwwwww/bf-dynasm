@@ -12,7 +12,7 @@
 static bf_profiler_t *g_profiler = NULL;
 
 // Forward declarations
-static void dump_folded_ast_node(ast_node_t *node, FILE *out);
+static void dump_folded_ast_node(ast_node_t *node, FILE *out, const char *stack_prefix);
 
 static uint64_t get_time_us(void) {
     struct timespec ts;
@@ -319,28 +319,43 @@ void bf_prof_dump_folded(bf_profiler_t *prof, void *debug_ptr, FILE *out) {
     // Count samples by location using the AST nodes directly
     ast_node_t *ast = (ast_node_t *)prof->ast_root;
     if (ast) {
-        dump_folded_ast_node(ast, out);
+        dump_folded_ast_node(ast, out, "");
     }
 }
 
-static void dump_folded_ast_node(ast_node_t *node, FILE *out) {
+static void dump_folded_ast_node(ast_node_t *node, FILE *out, const char *stack_prefix) {
     if (!node) return;
     
-    // Output this node if it has samples
-    if (node->profile_samples > 0) {
-        fprintf(out, "@%d:%d %s %d\n", 
-               node->line, node->column,
-               debug_node_type_name(node->type),
-               node->profile_samples);
+    char current_entry[256];
+    snprintf(current_entry, sizeof(current_entry), "@%d:%d %s", 
+             node->line, node->column, debug_node_type_name(node->type));
+    
+    if (node->type == AST_LOOP) {
+        // Build new stack with this loop added
+        char new_stack[2048];
+        if (strlen(stack_prefix) > 0) {
+            snprintf(new_stack, sizeof(new_stack), "%s;%s", stack_prefix, current_entry);
+        } else {
+            snprintf(new_stack, sizeof(new_stack), "%s", current_entry);
+        }
+        
+        // Recurse into loop body with extended stack
+        if (node->data.loop.body) {
+            dump_folded_ast_node(node->data.loop.body, out, new_stack);
+        }
+    } else {
+        // For non-loop nodes with samples, output the full stack
+        if (node->profile_samples > 0) {
+            if (strlen(stack_prefix) > 0) {
+                fprintf(out, "%s;%s %d\n", stack_prefix, current_entry, node->profile_samples);
+            } else {
+                fprintf(out, "%s %d\n", current_entry, node->profile_samples);
+            }
+        }
     }
     
-    // Recursively output loop body
-    if (node->type == AST_LOOP && node->data.loop.body) {
-        dump_folded_ast_node(node->data.loop.body, out);
-    }
-    
-    // Recursively output next sibling
+    // Continue with next sibling (same stack level)
     if (node->next) {
-        dump_folded_ast_node(node->next, out);
+        dump_folded_ast_node(node->next, out, stack_prefix);
     }
 }
