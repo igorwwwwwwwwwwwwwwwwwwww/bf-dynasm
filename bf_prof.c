@@ -145,10 +145,8 @@ void bf_prof_cleanup(bf_profiler_t *prof) {
     prof->sample_count = 0;
 }
 
-void bf_prof_dump_folded(bf_profiler_t *prof, void *debug_ptr, FILE *out) {
-    bf_debug_info_t *debug = (bf_debug_info_t *)debug_ptr;
-    
-    if (!prof || !debug) {
+void bf_prof_dump_folded(bf_profiler_t *prof, FILE *out) {
+    if (!prof || !prof->debug_info) {
         fprintf(out, "Error: Missing profiler or debug info\n");
         return;
     }

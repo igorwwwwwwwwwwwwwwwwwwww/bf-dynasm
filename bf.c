@@ -301,7 +301,7 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
-        bf_prof_dump_folded(&profiler, debug_ptr, prof_out);
+        bf_prof_dump_folded(&profiler, prof_out);
 
         fclose(prof_out);
         fprintf(stderr, "Profile data written to: %s\n", profile_output);
