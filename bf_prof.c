@@ -221,13 +221,13 @@ static void print_heat_indicator(int sample_count, int max_samples, FILE *out) {
     double heat_ratio = (double)sample_count / max_samples;
 
     if (heat_ratio >= 0.8) {
-        fprintf(out, " \033[41m🔥HOT\033[0m");  // Red background
+        fprintf(out, " \033[41mHOT\033[0m");  // Red background
     } else if (heat_ratio >= 0.5) {
-        fprintf(out, " \033[43m🔥WARM\033[0m"); // Yellow background
+        fprintf(out, " \033[43mWARM\033[0m"); // Yellow background
     } else if (heat_ratio >= 0.2) {
-        fprintf(out, " \033[42m📊\033[0m");     // Green background
+        fprintf(out, " \033[42mCOOL\033[0m");     // Green background
     } else if (sample_count > 0) {
-        fprintf(out, " \033[44m💤\033[0m");     // Blue background
+        fprintf(out, " \033[44mLOW\033[0m");     // Blue background
     }
 
     if (sample_count > 0) {
