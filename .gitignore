@@ -14,6 +14,10 @@ luajit/
 # Sanitizer builds
 *_asan
 
+# Profiler output files
+*.txt
+*.svg
+
 # Generated parser/lexer files
 bf_lexer.c
 bf_lexer.h

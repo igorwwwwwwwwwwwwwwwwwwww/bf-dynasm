@@ -191,7 +191,6 @@ int main(int argc, char *argv[]) {
     bool optimize = true;
     bool show_help = false;
     bool profile_mode = false;
-    bool profile_folded = false;
     const char *profile_output = NULL;
     int arg_offset = 1;
 
@@ -208,16 +207,6 @@ int main(int argc, char *argv[]) {
                 return 1;
             }
             profile_mode = true;
-            profile_output = argv[i + 1];
-            i++;
-            arg_offset += 2;
-        } else if (strcmp(argv[i], "--profile-folded") == 0) {
-            if (i + 1 >= argc) {
-                fprintf(stderr, "Error: --profile-folded requires a filename\n");
-                return 1;
-            }
-            profile_mode = true;
-            profile_folded = true;
             profile_output = argv[i + 1];
             i++;
             arg_offset += 2;
@@ -238,8 +227,7 @@ int main(int argc, char *argv[]) {
         fprintf(stream, "  --help, -h        Show this help message\n");
         fprintf(stream, "  --debug           Enable debug mode (dump AST and compiled code)\n");
         fprintf(stream, "  --no-optimize     Disable AST optimizations\n");
-        fprintf(stream, "  --profile file         Enable profiling (output to file)\n");
-        fprintf(stream, "  --profile-folded file  Enable profiling with folded stack format\n");
+        fprintf(stream, "  --profile file    Enable profiling (folded stack format)\n");
         fprintf(stream, "\nExamples:\n");
         fprintf(stream, "  %s examples/hello.b\n", argv[0]);
         fprintf(stream, "  %s --debug examples/fizzbuzz.b\n", argv[0]);
@@ -313,12 +301,7 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
-        if (profile_folded) {
-            bf_prof_dump_folded(&profiler, debug_ptr, prof_out);
-        } else {
-            bf_prof_dump_with_debug(&profiler, prof_out, debug_ptr);
-            bf_prof_print_heat_ast(&profiler, debug_ptr, ast, prof_out);
-        }
+        bf_prof_dump_folded(&profiler, debug_ptr, prof_out);
 
         fclose(prof_out);
         fprintf(stderr, "Profile data written to: %s\n", profile_output);
