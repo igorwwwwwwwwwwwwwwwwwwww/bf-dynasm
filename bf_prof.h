@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include "bf_ast.h"
 
 // Profiler configuration
 #define PROF_SAMPLE_RATE_HZ 1000
@@ -25,10 +26,12 @@ typedef struct {
     void *code_end;             // End of JIT code region
     bool enabled;               // Profiler enabled flag
     uint64_t start_time;        // Profiling start time
+    void *debug_info;           // Debug info for PC-to-AST mapping
+    void *ast_root;             // AST root for direct sample counting
 } bf_profiler_t;
 
 // Profiler functions
-int bf_prof_init(bf_profiler_t *prof, void *code_start, size_t code_size);
+int bf_prof_init(bf_profiler_t *prof, void *code_start, size_t code_size, void *debug_info, void *ast_root);
 void bf_prof_start(bf_profiler_t *prof);
 void bf_prof_stop(bf_profiler_t *prof);
 void bf_prof_dump(bf_profiler_t *prof, FILE *out);
@@ -37,5 +40,8 @@ void bf_prof_cleanup(bf_profiler_t *prof);
 
 // Heat map AST printing
 void bf_prof_print_heat_ast(bf_profiler_t *prof, void *debug, void *ast, FILE *out);
+
+// AST node lookup by location
+ast_node_t* bf_prof_find_ast_node(ast_node_t *node, int line, int column);
 
 #endif // BF_PROF_H

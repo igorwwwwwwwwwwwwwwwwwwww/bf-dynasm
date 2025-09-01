@@ -274,7 +274,7 @@ int main(int argc, char *argv[]) {
 
     bf_profiler_t profiler;
     if (profile_mode) {
-        if (bf_prof_init(&profiler, code_ptr, code_size) != 0) {
+        if (bf_prof_init(&profiler, code_ptr, code_size, debug_ptr, ast) != 0) {
             bf_error("Failed to initialize profiler");
         }
         bf_prof_start(&profiler);

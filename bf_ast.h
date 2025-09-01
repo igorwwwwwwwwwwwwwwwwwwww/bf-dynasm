@@ -39,6 +39,7 @@ typedef struct ast_node {
     } data;
     struct ast_node *next;        // Next sibling in sequence
     int line, column;             // Source location for debugging
+    int profile_samples;          // Sample count for profiler heat map
 } ast_node_t;
 
 // AST construction functions

@@ -41,10 +41,44 @@ static void prof_signal_handler(int sig, siginfo_t *info, void *context) {
         prof_sample_t *sample = &g_profiler->samples[g_profiler->sample_count++];
         sample->pc = pc;
         sample->timestamp = get_time_us() - g_profiler->start_time;
+        
+        // Directly increment AST node sample count
+        if (g_profiler->debug_info && g_profiler->ast_root) {
+            bf_debug_info_t *debug = (bf_debug_info_t *)g_profiler->debug_info;
+            debug_map_entry_t *entry = bf_debug_find_by_pc(debug, pc);
+            if (entry) {
+                ast_node_t *node = bf_prof_find_ast_node((ast_node_t *)g_profiler->ast_root, 
+                                                         entry->source_line, entry->source_column);
+                if (node) {
+                    node->profile_samples++;
+                }
+            }
+        }
     }
 }
 
-int bf_prof_init(bf_profiler_t *prof, void *code_start, size_t code_size) {
+ast_node_t* bf_prof_find_ast_node(ast_node_t *node, int line, int column) {
+    if (!node) return NULL;
+    
+    if (node->line == line && node->column == column) {
+        return node;
+    }
+    
+    // Search in loop body
+    if (node->type == AST_LOOP && node->data.loop.body) {
+        ast_node_t *found = bf_prof_find_ast_node(node->data.loop.body, line, column);
+        if (found) return found;
+    }
+    
+    // Search in next sibling
+    if (node->next) {
+        return bf_prof_find_ast_node(node->next, line, column);
+    }
+    
+    return NULL;
+}
+
+int bf_prof_init(bf_profiler_t *prof, void *code_start, size_t code_size, void *debug_info, void *ast_root) {
     memset(prof, 0, sizeof(*prof));
 
     prof->samples = malloc(PROF_MAX_SAMPLES * sizeof(prof_sample_t));
@@ -58,6 +92,8 @@ int bf_prof_init(bf_profiler_t *prof, void *code_start, size_t code_size) {
     prof->code_end = (char *)code_start + code_size;
     prof->enabled = false;
     prof->start_time = 0;
+    prof->debug_info = debug_info;
+    prof->ast_root = ast_root;
 
     return 0;
 }
@@ -157,15 +193,24 @@ void bf_prof_cleanup(bf_profiler_t *prof) {
     prof->max_samples = 0;
 }
 
-static int count_samples_for_location(bf_profiler_t *prof, bf_debug_info_t *debug, int line, int column) {
-    int count = 0;
-    for (int i = 0; i < prof->sample_count; i++) {
-        debug_map_entry_t *entry = bf_debug_find_by_pc(debug, prof->samples[i].pc);
-        if (entry && entry->source_line == line && entry->source_column == column) {
-            count++;
-        }
+static int find_max_samples(ast_node_t *node) {
+    if (!node) return 0;
+    
+    int max_samples = node->profile_samples;
+    
+    // Check loop body
+    if (node->type == AST_LOOP && node->data.loop.body) {
+        int loop_max = find_max_samples(node->data.loop.body);
+        if (loop_max > max_samples) max_samples = loop_max;
     }
-    return count;
+    
+    // Check next sibling
+    if (node->next) {
+        int next_max = find_max_samples(node->next);
+        if (next_max > max_samples) max_samples = next_max;
+    }
+    
+    return max_samples;
 }
 
 static void print_heat_indicator(int sample_count, int max_samples, FILE *out) {
@@ -199,9 +244,7 @@ static void print_heat_ast_node(ast_node_t *node, int indent, bf_profiler_t *pro
 
     if (node->line > 0 || node->column > 0) {
         fprintf(out, " @%d:%d", node->line, node->column);
-
-        int sample_count = count_samples_for_location(prof, debug, node->line, node->column);
-        print_heat_indicator(sample_count, max_samples, out);
+        print_heat_indicator(node->profile_samples, max_samples, out);
     }
 
     switch (node->type) {
@@ -248,15 +291,8 @@ void bf_prof_print_heat_ast(bf_profiler_t *prof, void *debug_ptr, void *ast_ptr,
         return;
     }
 
-    // Find max sample count for any location for heat scaling
-    int max_samples = 0;
-    for (int i = 0; i < debug->entry_count; i++) {
-        debug_map_entry_t *entry = &debug->entries[i];
-        int count = count_samples_for_location(prof, debug, entry->source_line, entry->source_column);
-        if (count > max_samples) {
-            max_samples = count;
-        }
-    }
+    // Find max sample count for any AST node for heat scaling
+    int max_samples = find_max_samples(ast);
 
     fprintf(out, "\n=== HEAT MAP AST (Total samples: %d, Max per location: %d) ===\n",
            prof->sample_count, max_samples);
