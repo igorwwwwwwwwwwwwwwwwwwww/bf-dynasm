@@ -9,23 +9,13 @@
 
 // Profiler configuration
 #define PROF_SAMPLE_RATE_HZ 1000
-#define PROF_MAX_SAMPLES 100000
-
-// Profile sample entry
-typedef struct {
-    void *pc;           // Program counter (instruction pointer)
-    uint64_t timestamp; // Sample timestamp in microseconds
-} prof_sample_t;
 
 // Profiler state
 typedef struct {
-    prof_sample_t *samples;     // Sample buffer
-    int sample_count;           // Current number of samples
-    int max_samples;            // Maximum samples capacity
+    int sample_count;           // Total number of samples collected
     void *code_start;           // Start of JIT code region
     void *code_end;             // End of JIT code region
     bool enabled;               // Profiler enabled flag
-    uint64_t start_time;        // Profiling start time
     void *debug_info;           // Debug info for PC-to-AST mapping
     void *ast_root;             // AST root for direct sample counting
 } bf_profiler_t;

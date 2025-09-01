@@ -6,7 +6,6 @@
 #include <signal.h>
 #include <sys/time.h>
 #include <unistd.h>
-#include <stdint.h>
 
 // Global profiler instance (needed for signal handler)
 static bf_profiler_t *g_profiler = NULL;
@@ -14,18 +13,12 @@ static bf_profiler_t *g_profiler = NULL;
 // Forward declarations
 static void dump_folded_ast_node(ast_node_t *node, FILE *out, const char *stack_prefix);
 
-static uint64_t get_time_us(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
-}
-
 // SIGPROF signal handler - samples the program counter
 static void prof_signal_handler(int sig, siginfo_t *info, void *context) {
     (void)sig;
     (void)info;
 
-    if (!g_profiler || !g_profiler->enabled || g_profiler->sample_count >= g_profiler->max_samples) {
+    if (!g_profiler || !g_profiler->enabled) {
         return;
     }
 
@@ -41,9 +34,7 @@ static void prof_signal_handler(int sig, siginfo_t *info, void *context) {
 
     // Only sample if PC is within our JIT code region
     if (pc >= g_profiler->code_start && pc < g_profiler->code_end) {
-        prof_sample_t *sample = &g_profiler->samples[g_profiler->sample_count++];
-        sample->pc = pc;
-        sample->timestamp = get_time_us() - g_profiler->start_time;
+        g_profiler->sample_count++;
         
         // Directly increment AST node sample count
         if (g_profiler->debug_info && g_profiler->ast_root) {
@@ -84,17 +75,10 @@ ast_node_t* bf_prof_find_ast_node(ast_node_t *node, int line, int column) {
 int bf_prof_init(bf_profiler_t *prof, void *code_start, size_t code_size, void *debug_info, void *ast_root) {
     memset(prof, 0, sizeof(*prof));
 
-    prof->samples = malloc(PROF_MAX_SAMPLES * sizeof(prof_sample_t));
-    if (!prof->samples) {
-        return -1;
-    }
-
     prof->sample_count = 0;
-    prof->max_samples = PROF_MAX_SAMPLES;
     prof->code_start = code_start;
     prof->code_end = (char *)code_start + code_size;
     prof->enabled = false;
-    prof->start_time = 0;
     prof->debug_info = debug_info;
     prof->ast_root = ast_root;
 
@@ -129,7 +113,6 @@ void bf_prof_start(bf_profiler_t *prof) {
     }
 
     prof->enabled = true;
-    prof->start_time = get_time_us();
     fprintf(stderr, "Profiler started: sampling at %d Hz, code region %p-%p\n", 
             PROF_SAMPLE_RATE_HZ, prof->code_start, prof->code_end);
 }
@@ -159,10 +142,7 @@ void bf_prof_cleanup(bf_profiler_t *prof) {
         bf_prof_stop(prof);
     }
 
-    free(prof->samples);
-    prof->samples = NULL;
     prof->sample_count = 0;
-    prof->max_samples = 0;
 }
 
 void bf_prof_dump_folded(bf_profiler_t *prof, void *debug_ptr, FILE *out) {
