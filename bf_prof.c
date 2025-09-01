@@ -327,7 +327,7 @@ static void dump_folded_ast_node(ast_node_t *node, FILE *out, const char *stack_
     if (!node) return;
     
     char current_entry[256];
-    snprintf(current_entry, sizeof(current_entry), "@%d:%d %s", 
+    snprintf(current_entry, sizeof(current_entry), "@%5d:%5d %s", 
              node->line, node->column, debug_node_type_name(node->type));
     
     if (node->type == AST_LOOP) {
