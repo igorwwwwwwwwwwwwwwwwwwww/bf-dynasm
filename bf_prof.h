@@ -41,6 +41,9 @@ void bf_prof_cleanup(bf_profiler_t *prof);
 // Heat map AST printing
 void bf_prof_print_heat_ast(bf_profiler_t *prof, void *debug, void *ast, FILE *out);
 
+// Folded stack format output
+void bf_prof_dump_folded(bf_profiler_t *prof, void *debug, FILE *out);
+
 // AST node lookup by location
 ast_node_t* bf_prof_find_ast_node(ast_node_t *node, int line, int column);
 

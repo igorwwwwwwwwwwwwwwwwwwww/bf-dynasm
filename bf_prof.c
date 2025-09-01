@@ -11,6 +11,9 @@
 // Global profiler instance (needed for signal handler)
 static bf_profiler_t *g_profiler = NULL;
 
+// Forward declarations
+static void dump_folded_ast_node(ast_node_t *node, FILE *out);
+
 static uint64_t get_time_us(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -300,4 +303,44 @@ void bf_prof_print_heat_ast(bf_profiler_t *prof, void *debug_ptr, void *ast_ptr,
 
     print_heat_ast_node(ast, 0, prof, debug, max_samples, out);
     fprintf(out, "\n");
+}
+
+void bf_prof_dump_folded(bf_profiler_t *prof, void *debug_ptr, FILE *out) {
+    bf_debug_info_t *debug = (bf_debug_info_t *)debug_ptr;
+    
+    if (!prof || !debug) {
+        fprintf(out, "Error: Missing profiler or debug info\n");
+        return;
+    }
+    
+    fprintf(out, "# Folded stack format for flame graphs\n");
+    fprintf(out, "# Format: @line:col AST_NODE count\n\n");
+    
+    // Count samples by location using the AST nodes directly
+    ast_node_t *ast = (ast_node_t *)prof->ast_root;
+    if (ast) {
+        dump_folded_ast_node(ast, out);
+    }
+}
+
+static void dump_folded_ast_node(ast_node_t *node, FILE *out) {
+    if (!node) return;
+    
+    // Output this node if it has samples
+    if (node->profile_samples > 0) {
+        fprintf(out, "@%d:%d %s %d\n", 
+               node->line, node->column,
+               debug_node_type_name(node->type),
+               node->profile_samples);
+    }
+    
+    // Recursively output loop body
+    if (node->type == AST_LOOP && node->data.loop.body) {
+        dump_folded_ast_node(node->data.loop.body, out);
+    }
+    
+    // Recursively output next sibling
+    if (node->next) {
+        dump_folded_ast_node(node->next, out);
+    }
 }
