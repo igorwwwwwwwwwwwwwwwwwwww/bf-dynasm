@@ -59,23 +59,31 @@ bazel build --config=amd64-darwin --config=asan //:bf
 ### Basic Usage
 
 ```bash
-# Run Brainfuck program
-bazel-bin/bf examples/hello.b
+# Run Brainfuck program directly with Bazel
+bazel run //:bf examples/hello.b
 
 # Run with debug mode (dumps AST and machine code)
-bazel-bin/bf --debug examples/fizzbuzz.b
+bazel run //:bf -- --debug examples/fizzbuzz.b
 
 # Run without optimizations
-bazel-bin/bf --no-optimize examples/hello.b
+bazel run //:bf -- --no-optimize examples/hello.b
 
 # Show help
-bazel-bin/bf --help
+bazel run //:bf -- --help
+
+# Or build first, then run the binary directly
+bazel build //:bf
+bazel-bin/bf examples/hello.b
 ```
 
 ### Profiling
 
 ```bash
 # Run with profiling (generates flame graph compatible output)
+bazel run //:bf -- --profile profile.folded examples/fizzbuzz.b
+
+# Or with built binary
+bazel build //:bf
 bazel-bin/bf --profile profile.folded examples/fizzbuzz.b
 ```
 
@@ -114,20 +122,16 @@ bazel-bin/bf examples/hello.b
 ### Local Testing
 ```bash
 # Test native version
-bazel build //:bf
-bazel-bin/bf examples/hello.b
+bazel run //:bf examples/hello.b
 
 # Test AMD64 Darwin version (via Rosetta)
-bazel build --config=amd64-darwin //:bf
-bazel-bin/bf examples/hello.b
+bazel run --config=amd64-darwin //:bf examples/hello.b
 
 # Test AddressSanitizer versions for debugging
-bazel build --config=asan //:bf
-bazel-bin/bf examples/hello.b
+bazel run --config=asan //:bf examples/hello.b
 
 # Test AMD64 with AddressSanitizer (via Rosetta)
-bazel build --config=amd64-darwin --config=asan //:bf
-bazel-bin/bf examples/hello.b
+bazel run --config=amd64-darwin --config=asan //:bf examples/hello.b
 ```
 
 ## Docker Multi-Platform Support
