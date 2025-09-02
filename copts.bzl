@@ -5,7 +5,7 @@ BF_DEFAULT_COPTS = [
     "-Wextra",
     "-O2",
     "-g",
-    "-std=c99",
+    "-std=c23",
 ] + select({
     "//:x64_darwin_config": ["-target", "x86_64-apple-macos10.12"],
     "//conditions:default": [],
