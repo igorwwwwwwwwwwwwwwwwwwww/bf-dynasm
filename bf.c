@@ -14,7 +14,7 @@
 
 #include "bf_parser.h"
 
-#define BF_MEMORY_SIZE 30000
+#define BF_DEFAULT_MEMORY_SIZE 65536  // 64KB - nice power of 2
 #define MAX_NESTING 1000
 
 // Memory allocation with guard pages
@@ -51,11 +51,11 @@ static char* allocate_guarded_memory(size_t size) {
     return data;
 }
 
-static void free_guarded_memory(char *memory) {
+static void free_guarded_memory(char *memory, size_t size) {
     if (!memory) return;
     
     size_t page_size = getpagesize();
-    size_t aligned_size = (BF_MEMORY_SIZE + page_size - 1) & ~(page_size - 1);
+    size_t aligned_size = (size + page_size - 1) & ~(page_size - 1);
     size_t total_size = page_size + aligned_size + page_size;
     
     // Find start of the full region (guard page before data)
@@ -238,6 +238,7 @@ int main(int argc, char *argv[]) {
     bool show_help = false;
     bool profile_mode = false;
     const char *profile_output = NULL;
+    size_t memory_size = BF_DEFAULT_MEMORY_SIZE;
     int arg_offset = 1;
 
     for (int i = 1; i < argc && argv[i][0] == '-'; i++) {
@@ -254,6 +255,19 @@ int main(int argc, char *argv[]) {
             }
             profile_mode = true;
             profile_output = argv[i + 1];
+            i++;
+            arg_offset += 2;
+        } else if (strcmp(argv[i], "--memory") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --memory requires a size in bytes\n");
+                return 1;
+            }
+            char *endptr;
+            memory_size = strtoul(argv[i + 1], &endptr, 10);
+            if (*endptr != '\0' || memory_size == 0) {
+                fprintf(stderr, "Error: Invalid memory size '%s'\n", argv[i + 1]);
+                return 1;
+            }
             i++;
             arg_offset += 2;
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
@@ -274,11 +288,13 @@ int main(int argc, char *argv[]) {
         fprintf(stream, "  --debug           Enable debug mode (dump AST and compiled code)\n");
         fprintf(stream, "  --no-optimize     Disable AST optimizations\n");
         fprintf(stream, "  --profile file    Enable profiling (folded stack format)\n");
+        fprintf(stream, "  --memory size     Set memory size in bytes (default: %zu)\n", (size_t)BF_DEFAULT_MEMORY_SIZE);
         fprintf(stream, "\nExamples:\n");
         fprintf(stream, "  %s examples/hello.b\n", argv[0]);
         fprintf(stream, "  %s --debug examples/fizzbuzz.b\n", argv[0]);
         fprintf(stream, "  %s --no-optimize examples/mandelbrot.b\n", argv[0]);
         fprintf(stream, "  %s --profile profile.txt examples/mandelbrot.b\n", argv[0]);
+        fprintf(stream, "  %s --memory 32768 examples/hello.b\n", argv[0]);
         return show_help ? 0 : 1;
     }
 
@@ -326,7 +342,7 @@ int main(int argc, char *argv[]) {
         bf_prof_start(&profiler);
     }
 
-    char *memory = allocate_guarded_memory(BF_MEMORY_SIZE);
+    char *memory = allocate_guarded_memory(memory_size);
     if (!memory) {
         bf_error("Memory allocation failed");
     }
@@ -342,7 +358,7 @@ int main(int argc, char *argv[]) {
             bf_prof_cleanup(&profiler);
             if (debug_ptr) bf_debug_cleanup(debug_ptr);
             free(program);
-            free_guarded_memory(memory);
+            free_guarded_memory(memory, memory_size);
             if (ast) ast_free(ast);
             return 1;
         }
@@ -360,7 +376,7 @@ int main(int argc, char *argv[]) {
     }
 
     free(program);
-    free_guarded_memory(memory);
+    free_guarded_memory(memory, memory_size);
     if (ast) {
         ast_free(ast);
     }

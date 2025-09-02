@@ -71,6 +71,9 @@ bazel run //:bf -- --no-optimize examples/hello.b
 # Show help
 bazel run //:bf -- --help
 
+# Set custom memory size (in bytes)
+bazel run //:bf -- --memory 32768 examples/hello.b
+
 # Or build first, then run the binary directly
 bazel build //:bf
 bazel-bin/bf examples/hello.b
@@ -184,9 +187,9 @@ docker run --platform=linux/arm64 bf-dynasm
 - PC labels for loop management with proper nesting
 
 ### Memory Model
-- 30,000 byte memory array (standard Brainfuck memory size)
+- 65,536 byte memory array by default (configurable via --memory option)
 - Zero-initialized memory
-- Bounds checking through runtime error handling
+- Bounds checking with guard pages for immediate crash detection
 
 ### Optimization Features
 - Direct memory operations (no interpretation overhead)
