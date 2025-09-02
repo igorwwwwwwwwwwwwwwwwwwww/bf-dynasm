@@ -1,0 +1,26 @@
+# General build settings
+build --cxxopt=-std=c++17
+build --copt=-std=c99
+build --enable_workspace  # Use WORKSPACE instead of MODULE.bazel
+
+# Debug builds
+build:debug --copt=-g
+build:debug --strip=never
+
+# Optimized builds
+build:opt --copt=-O2
+build:opt --copt=-DNDEBUG
+
+# AddressSanitizer
+build:asan --copt=-fsanitize=address
+build:asan --linkopt=-fsanitize=address
+build:asan --copt=-fno-omit-frame-pointer
+
+# Platform-specific settings
+build:macos --copt=-target --copt=x86_64-apple-macos10.12
+build:macos --linkopt=-target --linkopt=x86_64-apple-macos10.12
+
+# Default settings
+build --disk_cache=~/.cache/bazel-disk-cache
+build --repository_cache=~/.cache/bazel-repo-cache
+build --experimental_reuse_sandbox_directories

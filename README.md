@@ -7,8 +7,10 @@ A high-performance Brainfuck interpreter with Just-In-Time compilation using Dyn
 - **JIT Compilation**: Compiles Brainfuck source to native machine code at runtime
 - **AST Optimizations**: Advanced optimizations including multiplication loops, offset operations, and constant propagation
 - **Multi-Architecture**: Supports both ARM64 and x64 architectures
+- **Profiling Support**: Built-in profiler with flame graph compatibility and PC-to-AST mapping
 - **Debug Mode**: Dumps AST and compiled machine code for analysis
 - **High Performance**: Direct native code execution with minimal overhead
+- **Modern Build Systems**: Support for both Make and Bazel
 
 ## Building
 
@@ -16,11 +18,13 @@ A high-performance Brainfuck interpreter with Just-In-Time compilation using Dyn
 
 - GCC or Clang
 - LuaJIT (for DynASM preprocessing)
-- Make
+- Make or Bazel
 - Bison (parser generator)
 - Flex (lexical analyzer generator)
 
 ### Build Commands
+
+#### Using Make (Traditional)
 
 ```bash
 # Install dependencies on macOS
@@ -40,7 +44,19 @@ make amd64-darwin-asan      # AMD64 ASan version (via Rosetta)
 make clean
 ```
 
+#### Using Bazel
+
+```bash
+# Install dependencies
+brew install luajit flex bison bazel
+
+# Build
+bazel build //:bf_core
+```
+
 ## Usage
+
+### Basic Usage
 
 ```bash
 # Run Brainfuck program
@@ -54,6 +70,13 @@ make clean
 
 # Show help
 ./bf --help
+```
+
+### Profiling
+
+```bash
+# Run with profiling (generates flame graph compatible output)
+./bf --profile profile.folded examples/fizzbuzz.b
 ```
 
 ## Optimizations
@@ -163,6 +186,12 @@ docker run --platform=linux/arm64 dynasm-bf
 - AST dump showing optimization transformations
 - Hex dump of compiled machine code
 - Architecture identification
+- Line:column information displayed in grey after each AST node
+
+### Profiling System
+- Signal-based profiling with PC-to-AST mapping
+- Flame graph compatible output format
+- Nested loop context tracking
 
 
 ## Performance

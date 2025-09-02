@@ -1,0 +1,68 @@
+package(default_visibility = ["//visibility:public"])
+
+# Generate parser from bison grammar using modern bison
+genrule(
+    name = "bf_parser",
+    srcs = ["bf_parser.y"],
+    outs = ["bf_parser.c", "bf_parser.h"],
+    cmd = "/opt/homebrew/opt/bison/bin/bison -d -o $(location bf_parser.c) $(location bf_parser.y)",
+)
+
+# Generate lexer from flex grammar using system flex
+genrule(
+    name = "bf_lexer",
+    srcs = ["bf_lexer.l", ":bf_parser"],
+    outs = ["bf_lexer.c"],
+    cmd = "flex -o $(location bf_lexer.c) $(location bf_lexer.l)",
+)
+
+# Core library with common components
+cc_library(
+    name = "bf_core",
+    srcs = [
+        "bf_ast.c",
+        "bf_prof.c",
+        "bf_debug.c",
+        ":bf_parser",
+        ":bf_lexer",
+    ],
+    hdrs = [
+        "bf_ast.h",
+        "bf_prof.h",
+        "bf_debug.h",
+        ":bf_parser",
+    ],
+    copts = [
+        "-Wall",
+        "-Wextra",
+        "-O2",
+        "-g",
+        "-std=c99",
+    ],
+)
+
+# Simple test target that just tests the core library
+cc_test(
+    name = "bf_core_test",
+    srcs = ["bf_ast.c"],  # Just a simple compilation test
+    deps = [":bf_core"],
+    size = "small",
+)
+
+# Basic interpreter without JIT (interpreter mode only)
+cc_binary(
+    name = "bf_simple",
+    srcs = [
+        "bf_simple.c",  # We'll create this as a simple interpreter
+    ],
+    deps = [
+        ":bf_core",
+    ],
+    copts = [
+        "-Wall",
+        "-Wextra",
+        "-O2",
+        "-g",
+        "-std=c99",
+    ],
+)
