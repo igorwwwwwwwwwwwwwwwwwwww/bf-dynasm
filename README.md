@@ -142,10 +142,10 @@ The project includes a multi-platform Dockerfile that automatically detects the 
 
 ```bash
 # Build multi-platform image (works on both x64 and ARM64)
-docker buildx build --platform=linux/amd64,linux/arm64 -t dynasm-bf .
+docker buildx build --platform=linux/amd64,linux/arm64 -t bf-dynasm .
 
 # Run on any platform (automatically selects correct architecture)
-docker run --rm dynasm-bf
+docker run --rm bf-dynasm
 
 # Expected output: "Hello World!"
 ```
@@ -154,23 +154,23 @@ docker run --rm dynasm-bf
 
 ```bash
 # Test with custom Brainfuck code
-docker run --rm dynasm-bf sh -c 'echo "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++." > test.b && ./bf test.b'
+docker run --rm bf-dynasm sh -c 'echo "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++." > test.b && ./bf test.b'
 
 # Run with debug mode to see compiled machine code
-docker run --rm dynasm-bf ./bf --debug hello.b
+docker run --rm bf-dynasm ./bf --debug hello.b
 ```
 
 ### Cross-Platform Testing
 
 ```bash
 # Build once, test on both architectures
-docker buildx build --platform=linux/amd64,linux/arm64 -t dynasm-bf .
+docker buildx build --platform=linux/amd64,linux/arm64 -t bf-dynasm .
 
 # Test x64 version (with emulation if on ARM64 host)
-docker run --platform=linux/amd64 dynasm-bf
+docker run --platform=linux/amd64 bf-dynasm
 
 # Test ARM64 version (with emulation if on x64 host)
-docker run --platform=linux/arm64 dynasm-bf
+docker run --platform=linux/arm64 bf-dynasm
 
 # Both should output: "Hello World!"
 ```

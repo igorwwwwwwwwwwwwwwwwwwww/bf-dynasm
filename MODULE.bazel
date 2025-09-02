@@ -1,5 +1,5 @@
 module(
-    name = "dynasm_brainfuck",
+    name = "bf_dynasm",
     version = "1.0.0",
     compatibility_level = 1,
 )

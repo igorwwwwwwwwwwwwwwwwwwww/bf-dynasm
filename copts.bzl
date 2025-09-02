@@ -1,4 +1,4 @@
-"""Centralized compiler options for dynasm-brainfuck."""
+"""Centralized compiler options for bf-dynasm."""
 
 BF_DEFAULT_COPTS = [
     "-Wall",
