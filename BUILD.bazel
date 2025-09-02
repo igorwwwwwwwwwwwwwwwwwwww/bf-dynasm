@@ -16,9 +16,29 @@ genrule(
     cmd = "flex -o $(location bf_lexer.c) $(location bf_lexer.l)",
 )
 
-# Core library with common components
+# Generate ARM64 DynASM file
+genrule(
+    name = "bf_arm64_dasc",
+    srcs = [
+        "bf_arm64.dasc",
+    ] + glob(["luajit/dynasm/*.lua"]),
+    outs = ["bf_arm64.c"],
+    cmd = "luajit luajit/dynasm/dynasm.lua -o $(OUTS) $(location bf_arm64.dasc)",
+)
+
+# Generate AMD64 DynASM file  
+genrule(
+    name = "bf_amd64_dasc",
+    srcs = [
+        "bf_amd64.dasc", 
+    ] + glob(["luajit/dynasm/*.lua"]),
+    outs = ["bf_amd64.c"],
+    cmd = "luajit luajit/dynasm/dynasm.lua -o $(OUTS) $(location bf_amd64.dasc)",
+)
+
+# Core components library  
 cc_library(
-    name = "bf_core",
+    name = "bf_components",
     srcs = [
         "bf_ast.c",
         "bf_prof.c",
@@ -41,3 +61,42 @@ cc_library(
     ],
 )
 
+# DynASM headers library
+cc_library(
+    name = "dynasm_headers",
+    hdrs = [
+        "luajit/dynasm/dasm_proto.h",
+        "luajit/dynasm/dasm_arm64.h", 
+        "luajit/dynasm/dasm_x86.h",
+    ],
+    includes = ["luajit/dynasm"],
+)
+
+# JIT library with DynASM generated files available for inclusion
+cc_library(
+    name = "bf_jit",
+    hdrs = [
+        ":bf_arm64_dasc",
+        ":bf_amd64_dasc", 
+    ],
+    deps = [":dynasm_headers"],
+)
+
+# Main Brainfuck JIT compiler binary
+cc_binary(
+    name = "bf",
+    srcs = [
+        "bf.c",
+    ],
+    deps = [
+        ":bf_components",
+        ":bf_jit",
+    ],
+    copts = [
+        "-Wall",
+        "-Wextra",
+        "-O2",
+        "-g", 
+        "-std=c99",
+    ],
+)
