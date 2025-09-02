@@ -1,4 +1,5 @@
 %{
+#define _GNU_SOURCE
 #include "bf_parser.h"
 
 static int current_column = 1;

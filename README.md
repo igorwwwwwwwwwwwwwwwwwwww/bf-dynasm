@@ -7,53 +7,84 @@ A high-performance Brainfuck interpreter with Just-In-Time compilation using Dyn
 - **JIT Compilation**: Compiles Brainfuck source to native machine code at runtime
 - **AST Optimizations**: Advanced optimizations including multiplication loops, offset operations, and constant propagation
 - **Multi-Architecture**: Supports both ARM64 and x64 architectures
+- **Profiling Support**: Built-in profiler with flame graph compatibility and PC-to-AST mapping
 - **Debug Mode**: Dumps AST and compiled machine code for analysis
 - **High Performance**: Direct native code execution with minimal overhead
+- **Modern Build System**: Bazel build system with multi-platform and sanitizer support
 
 ## Building
 
 ### Prerequisites
 
 - GCC or Clang
-- LuaJIT (for DynASM preprocessing)
-- Make
-- Bison (parser generator)
+- Bazel (build system)
+- Bison (parser generator) 
 - Flex (lexical analyzer generator)
+
+Note: LuaJIT is built from source by the build system
 
 ### Build Commands
 
 ```bash
 # Install dependencies on macOS
-brew install luajit flex bison
+brew install flex bison bazel
 
-# Build native version (default - ARM64 on ARM64, AMD64 on AMD64)
-make
+# Build native version
+bazel build //:bf
 
-# Build AMD64 macOS cross-compiled version  
-make amd64-darwin
+# Build with debug mode
+bazel build --config=debug //:bf
 
-# Build AddressSanitizer debug versions
-make asan                    # Native ASan version
-make amd64-darwin-asan      # AMD64 ASan version (via Rosetta)
+# Build with optimizations
+bazel build --config=opt //:bf
 
-# Clean build files
-make clean
+# Build AddressSanitizer version
+bazel build --config=asan //:bf
+
+# Build ThreadSanitizer version  
+bazel build --config=tsan //:bf
+
+# Build MemorySanitizer version
+bazel build --config=msan //:bf
+
+# Cross-compile for AMD64 Darwin
+bazel build --config=amd64-darwin //:bf
+
+# Combine configs (e.g., AMD64 with AddressSanitizer)
+bazel build --config=amd64-darwin --config=asan //:bf
 ```
 
 ## Usage
 
+### Basic Usage
+
 ```bash
-# Run Brainfuck program
-./bf examples/hello.b
+# Run Brainfuck program directly with Bazel
+bazel run //:bf examples/hello.b
 
 # Run with debug mode (dumps AST and machine code)
-./bf --debug examples/fizzbuzz.b
+bazel run //:bf -- --debug examples/fizzbuzz.b
 
 # Run without optimizations
-./bf --no-optimize examples/hello.b
+bazel run //:bf -- --no-optimize examples/hello.b
 
 # Show help
-./bf --help
+bazel run //:bf -- --help
+
+# Or build first, then run the binary directly
+bazel build //:bf
+bazel-bin/bf examples/hello.b
+```
+
+### Profiling
+
+```bash
+# Run with profiling (generates flame graph compatible output)
+bazel run //:bf -- --profile profile.folded examples/fizzbuzz.b
+
+# Or with built binary
+bazel build //:bf
+bazel-bin/bf --profile profile.folded examples/fizzbuzz.b
 ```
 
 ## Optimizations
@@ -82,7 +113,8 @@ The compiler includes several AST-level optimizations:
 
 ```bash
 # AMD64 version (automatically uses Rosetta on ARM64 Macs)
-./bf_amd64_darwin examples/hello.b
+bazel build --config=amd64-darwin //:bf
+bazel-bin/bf examples/hello.b
 ```
 
 ## Testing
@@ -90,14 +122,16 @@ The compiler includes several AST-level optimizations:
 ### Local Testing
 ```bash
 # Test native version
-./bf examples/hello.b
+bazel run //:bf examples/hello.b
 
 # Test AMD64 Darwin version (via Rosetta)
-./bf_amd64_darwin examples/hello.b
+bazel run --config=amd64-darwin //:bf examples/hello.b
 
 # Test AddressSanitizer versions for debugging
-./bf_asan examples/hello.b                    # Native ASan
-./bf_amd64_darwin_asan examples/hello.b      # AMD64 ASan (via Rosetta)
+bazel run --config=asan //:bf examples/hello.b
+
+# Test AMD64 with AddressSanitizer (via Rosetta)
+bazel run --config=amd64-darwin --config=asan //:bf examples/hello.b
 ```
 
 ## Docker Multi-Platform Support
@@ -123,7 +157,7 @@ docker run --rm dynasm-bf
 docker run --rm dynasm-bf sh -c 'echo "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++." > test.b && ./bf test.b'
 
 # Run with debug mode to see compiled machine code
-docker run --rm dynasm-bf ./bf --debug examples/hello.b
+docker run --rm dynasm-bf ./bf --debug hello.b
 ```
 
 ### Cross-Platform Testing
@@ -163,6 +197,12 @@ docker run --platform=linux/arm64 dynasm-bf
 - AST dump showing optimization transformations
 - Hex dump of compiled machine code
 - Architecture identification
+- Line:column information displayed in grey after each AST node
+
+### Profiling System
+- Signal-based profiling with PC-to-AST mapping
+- Flame graph compatible output format
+- Nested loop context tracking
 
 
 ## Performance
