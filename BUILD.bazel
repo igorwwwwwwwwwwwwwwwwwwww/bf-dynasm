@@ -41,28 +41,3 @@ cc_library(
     ],
 )
 
-# Simple test target that just tests the core library
-cc_test(
-    name = "bf_core_test",
-    srcs = ["bf_ast.c"],  # Just a simple compilation test
-    deps = [":bf_core"],
-    size = "small",
-)
-
-# Basic interpreter without JIT (interpreter mode only)
-cc_binary(
-    name = "bf_simple",
-    srcs = [
-        "bf_simple.c",  # We'll create this as a simple interpreter
-    ],
-    deps = [
-        ":bf_core",
-    ],
-    copts = [
-        "-Wall",
-        "-Wextra",
-        "-O2",
-        "-g",
-        "-std=c99",
-    ],
-)

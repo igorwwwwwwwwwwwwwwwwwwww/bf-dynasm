@@ -1,7 +1,6 @@
 # General build settings
 build --cxxopt=-std=c++17
 build --copt=-std=c99
-build --enable_workspace  # Use WORKSPACE instead of MODULE.bazel
 
 # Debug builds
 build:debug --copt=-g
