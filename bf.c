@@ -17,6 +17,52 @@
 #define BF_MEMORY_SIZE 30000
 #define MAX_NESTING 1000
 
+// Memory allocation with guard pages
+static char* allocate_guarded_memory(size_t size) {
+    // Get page size for alignment
+    size_t page_size = getpagesize();
+    
+    // Round up size to page boundary
+    size_t aligned_size = (size + page_size - 1) & ~(page_size - 1);
+    
+    // Allocate 3 regions: guard page + data + guard page
+    size_t total_size = page_size + aligned_size + page_size;
+    
+    void *region = mmap(NULL, total_size, PROT_READ | PROT_WRITE, 
+                       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (region == MAP_FAILED) {
+        return NULL;
+    }
+    
+    char *guard1 = (char*)region;
+    char *data = guard1 + page_size;  
+    char *guard2 = data + aligned_size;
+    
+    // Make guard pages inaccessible (no read/write/execute)
+    if (mprotect(guard1, page_size, PROT_NONE) != 0 ||
+        mprotect(guard2, page_size, PROT_NONE) != 0) {
+        munmap(region, total_size);
+        return NULL;
+    }
+    
+    // Zero the data region
+    memset(data, 0, size);
+    
+    return data;
+}
+
+static void free_guarded_memory(char *memory) {
+    if (!memory) return;
+    
+    size_t page_size = getpagesize();
+    size_t aligned_size = (BF_MEMORY_SIZE + page_size - 1) & ~(page_size - 1);
+    size_t total_size = page_size + aligned_size + page_size;
+    
+    // Find start of the full region (guard page before data)
+    char *region_start = memory - page_size;
+    munmap(region_start, total_size);
+}
+
 typedef int (*bf_func)(char *memory);
 
 // Include architecture-specific generated C files based on target architecture
@@ -280,7 +326,7 @@ int main(int argc, char *argv[]) {
         bf_prof_start(&profiler);
     }
 
-    char *memory = calloc(BF_MEMORY_SIZE, 1);
+    char *memory = allocate_guarded_memory(BF_MEMORY_SIZE);
     if (!memory) {
         bf_error("Memory allocation failed");
     }
@@ -296,7 +342,7 @@ int main(int argc, char *argv[]) {
             bf_prof_cleanup(&profiler);
             if (debug_ptr) bf_debug_cleanup(debug_ptr);
             free(program);
-            free(memory);
+            free_guarded_memory(memory);
             if (ast) ast_free(ast);
             return 1;
         }
@@ -314,7 +360,7 @@ int main(int argc, char *argv[]) {
     }
 
     free(program);
-    free(memory);
+    free_guarded_memory(memory);
     if (ast) {
         ast_free(ast);
     }
