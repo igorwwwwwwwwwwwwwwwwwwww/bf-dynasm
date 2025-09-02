@@ -15,11 +15,28 @@ build:asan --copt=-fsanitize=address
 build:asan --linkopt=-fsanitize=address
 build:asan --copt=-fno-omit-frame-pointer
 
-# Platform-specific settings
-build:macos --copt=-target --copt=x86_64-apple-macos10.12
-build:macos --linkopt=-target --linkopt=x86_64-apple-macos10.12
+# ThreadSanitizer
+build:tsan --copt=-fsanitize=thread
+build:tsan --linkopt=-fsanitize=thread
+build:tsan --copt=-fno-omit-frame-pointer
+
+# MemorySanitizer
+build:msan --copt=-fsanitize=memory
+build:msan --linkopt=-fsanitize=memory
+build:msan --copt=-fno-omit-frame-pointer
+
+# Cross-compilation settings
+build:amd64-darwin --copt=-target --copt=x86_64-apple-macos10.12
+build:amd64-darwin --linkopt=-target --linkopt=x86_64-apple-macos10.12
 
 # Default settings
 build --disk_cache=~/.cache/bazel-disk-cache
 build --repository_cache=~/.cache/bazel-repo-cache
 build --experimental_reuse_sandbox_directories
+
+# preserve CWD for run command  
+run --run_under="cd $BUILD_WORKING_DIRECTORY && "
+
+# make bazel run less chatty
+run --ui_event_filters=-info,-stdout,-stderr,warning,error
+run --noshow_progress

@@ -10,48 +10,48 @@ A high-performance Brainfuck interpreter with Just-In-Time compilation using Dyn
 - **Profiling Support**: Built-in profiler with flame graph compatibility and PC-to-AST mapping
 - **Debug Mode**: Dumps AST and compiled machine code for analysis
 - **High Performance**: Direct native code execution with minimal overhead
-- **Modern Build Systems**: Support for both Make and Bazel
+- **Modern Build System**: Bazel build system with multi-platform and sanitizer support
 
 ## Building
 
 ### Prerequisites
 
 - GCC or Clang
-- LuaJIT (for DynASM preprocessing)
-- Make or Bazel
-- Bison (parser generator)
+- Bazel (build system)
+- Bison (parser generator) 
 - Flex (lexical analyzer generator)
+
+Note: LuaJIT is built from source by the build system
 
 ### Build Commands
 
-#### Using Make (Traditional)
-
 ```bash
 # Install dependencies on macOS
-brew install luajit flex bison
+brew install flex bison bazel
 
-# Build native version (default - ARM64 on ARM64, AMD64 on AMD64)
-make
+# Build native version
+bazel build //:bf
 
-# Build AMD64 macOS cross-compiled version  
-make amd64-darwin
+# Build with debug mode
+bazel build --config=debug //:bf
 
-# Build AddressSanitizer debug versions
-make asan                    # Native ASan version
-make amd64-darwin-asan      # AMD64 ASan version (via Rosetta)
+# Build with optimizations
+bazel build --config=opt //:bf
 
-# Clean build files
-make clean
-```
+# Build AddressSanitizer version
+bazel build --config=asan //:bf
 
-#### Using Bazel
+# Build ThreadSanitizer version  
+bazel build --config=tsan //:bf
 
-```bash
-# Install dependencies
-brew install luajit flex bison bazel
+# Build MemorySanitizer version
+bazel build --config=msan //:bf
 
-# Build
-bazel build //:bf_core
+# Cross-compile for AMD64 Darwin
+bazel build --config=amd64-darwin //:bf
+
+# Combine configs (e.g., AMD64 with AddressSanitizer)
+bazel build --config=amd64-darwin --config=asan //:bf
 ```
 
 ## Usage
@@ -60,23 +60,23 @@ bazel build //:bf_core
 
 ```bash
 # Run Brainfuck program
-./bf examples/hello.b
+bazel-bin/bf examples/hello.b
 
 # Run with debug mode (dumps AST and machine code)
-./bf --debug examples/fizzbuzz.b
+bazel-bin/bf --debug examples/fizzbuzz.b
 
 # Run without optimizations
-./bf --no-optimize examples/hello.b
+bazel-bin/bf --no-optimize examples/hello.b
 
 # Show help
-./bf --help
+bazel-bin/bf --help
 ```
 
 ### Profiling
 
 ```bash
 # Run with profiling (generates flame graph compatible output)
-./bf --profile profile.folded examples/fizzbuzz.b
+bazel-bin/bf --profile profile.folded examples/fizzbuzz.b
 ```
 
 ## Optimizations
@@ -105,7 +105,8 @@ The compiler includes several AST-level optimizations:
 
 ```bash
 # AMD64 version (automatically uses Rosetta on ARM64 Macs)
-./bf_amd64_darwin examples/hello.b
+bazel build --config=amd64-darwin //:bf
+bazel-bin/bf examples/hello.b
 ```
 
 ## Testing
@@ -113,14 +114,20 @@ The compiler includes several AST-level optimizations:
 ### Local Testing
 ```bash
 # Test native version
-./bf examples/hello.b
+bazel build //:bf
+bazel-bin/bf examples/hello.b
 
 # Test AMD64 Darwin version (via Rosetta)
-./bf_amd64_darwin examples/hello.b
+bazel build --config=amd64-darwin //:bf
+bazel-bin/bf examples/hello.b
 
 # Test AddressSanitizer versions for debugging
-./bf_asan examples/hello.b                    # Native ASan
-./bf_amd64_darwin_asan examples/hello.b      # AMD64 ASan (via Rosetta)
+bazel build --config=asan //:bf
+bazel-bin/bf examples/hello.b
+
+# Test AMD64 with AddressSanitizer (via Rosetta)
+bazel build --config=amd64-darwin --config=asan //:bf
+bazel-bin/bf examples/hello.b
 ```
 
 ## Docker Multi-Platform Support
@@ -146,7 +153,7 @@ docker run --rm dynasm-bf
 docker run --rm dynasm-bf sh -c 'echo "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++." > test.b && ./bf test.b'
 
 # Run with debug mode to see compiled machine code
-docker run --rm dynasm-bf ./bf --debug examples/hello.b
+docker run --rm dynasm-bf ./bf --debug hello.b
 ```
 
 ### Cross-Platform Testing

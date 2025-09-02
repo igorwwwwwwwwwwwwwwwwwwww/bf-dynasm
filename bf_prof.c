@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include "bf_prof.h"
 #include "bf_debug.h"
 #include <stdio.h>
@@ -24,12 +25,19 @@ static void prof_signal_handler(int sig, siginfo_t *info, void *context) {
 
     // Extract program counter from signal context
     void *pc = NULL;
-#if defined(__x86_64__) || defined(__x86_64) || defined(__amd64__) || defined(__amd64)
     ucontext_t *uc = (ucontext_t *)context;
-    pc = (void *)uc->uc_mcontext->__ss.__rip;
-#elif defined(__aarch64__) || defined(__arm64__)
-    ucontext_t *uc = (ucontext_t *)context;
-    pc = (void *)uc->uc_mcontext->__ss.__pc;
+#if defined(__APPLE__)
+    #if defined(__x86_64__)
+        pc = (void *)uc->uc_mcontext->__ss.__rip;
+    #elif defined(__aarch64__)
+        pc = (void *)uc->uc_mcontext->__ss.__pc;
+    #endif
+#elif defined(__linux__)
+    #if defined(__x86_64__)
+        pc = (void *)uc->uc_mcontext.gregs[REG_RIP];
+    #elif defined(__aarch64__)
+        pc = (void *)uc->uc_mcontext.pc;
+    #endif
 #endif
 
     // Only sample if PC is within our JIT code region

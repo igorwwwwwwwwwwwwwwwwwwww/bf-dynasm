@@ -1,6 +1,16 @@
+load("//:copts.bzl", "BF_DEFAULT_COPTS", "BF_DEFAULT_LINKOPTS")
+
 package(default_visibility = ["//visibility:public"])
 
-# Generate parser from bison grammar using modern bison
+
+config_setting(
+    name = "x64_darwin_config", 
+    constraint_values = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:macos",
+    ],
+)
+
 genrule(
     name = "bf_parser",
     srcs = ["bf_parser.y"],
@@ -8,35 +18,47 @@ genrule(
     cmd = "PATH=/opt/homebrew/opt/bison/bin:$$PATH bison -d -o $(location bf_parser.c) $(location bf_parser.y)",
 )
 
-# Generate lexer from flex grammar using system flex
 genrule(
     name = "bf_lexer",
     srcs = ["bf_lexer.l", ":bf_parser"],
     outs = ["bf_lexer.c"],
-    cmd = "flex -o $(location bf_lexer.c) $(location bf_lexer.l)",
+    cmd = "PATH=/opt/homebrew/opt/flex/bin:$$PATH flex -o $(location bf_lexer.c) $(location bf_lexer.l)",
 )
 
-# Generate ARM64 DynASM file
+genrule(
+    name = "luajit",
+    srcs = glob(["luajit/**/*"]),
+    outs = ["luajit_built/luajit"],
+    cmd = """
+        export MACOSX_DEPLOYMENT_TARGET=11.0 && \
+        cp -r luajit luajit_tmp && \
+        cd luajit_tmp && \
+        make clean && \
+        make -j4 && \
+        cp src/luajit ../$(OUTS)
+    """,
+)
+
 genrule(
     name = "bf_arm64_dasc",
     srcs = [
         "bf_arm64.dasc",
+        ":luajit",
     ] + glob(["luajit/dynasm/*.lua"]),
     outs = ["bf_arm64.c"],
-    cmd = "luajit luajit/dynasm/dynasm.lua -o $(OUTS) $(location bf_arm64.dasc)",
+    cmd = "$(location :luajit) luajit/dynasm/dynasm.lua -o $(OUTS) $(location bf_arm64.dasc)",
 )
 
-# Generate AMD64 DynASM file  
 genrule(
     name = "bf_amd64_dasc",
     srcs = [
-        "bf_amd64.dasc", 
+        "bf_amd64.dasc",
+        ":luajit",
     ] + glob(["luajit/dynasm/*.lua"]),
     outs = ["bf_amd64.c"],
-    cmd = "luajit luajit/dynasm/dynasm.lua -o $(OUTS) $(location bf_amd64.dasc)",
+    cmd = "$(location :luajit) luajit/dynasm/dynasm.lua -o $(OUTS) $(location bf_amd64.dasc)",
 )
 
-# Core components library  
 cc_library(
     name = "bf_components",
     srcs = [
@@ -52,51 +74,38 @@ cc_library(
         "bf_debug.h",
         ":bf_parser",
     ],
-    copts = [
-        "-Wall",
-        "-Wextra",
-        "-O2",
-        "-g",
-        "-std=c99",
-    ],
+    copts = BF_DEFAULT_COPTS,
 )
 
-# DynASM headers library
+
 cc_library(
     name = "dynasm_headers",
     hdrs = [
         "luajit/dynasm/dasm_proto.h",
-        "luajit/dynasm/dasm_arm64.h", 
+        "luajit/dynasm/dasm_arm64.h",
         "luajit/dynasm/dasm_x86.h",
     ],
     includes = ["luajit/dynasm"],
 )
 
-# JIT library with DynASM generated files available for inclusion
 cc_library(
     name = "bf_jit",
     hdrs = [
         ":bf_arm64_dasc",
-        ":bf_amd64_dasc", 
+        ":bf_amd64_dasc",
     ],
     deps = [":dynasm_headers"],
 )
 
-# Main Brainfuck JIT compiler binary
 cc_binary(
     name = "bf",
     srcs = [
         "bf.c",
     ],
     deps = [
-        ":bf_components",
         ":bf_jit",
+        ":bf_components",
     ],
-    copts = [
-        "-Wall",
-        "-Wextra",
-        "-O2",
-        "-g", 
-        "-std=c99",
-    ],
+    copts = BF_DEFAULT_COPTS,
+    linkopts = BF_DEFAULT_LINKOPTS,
 )
