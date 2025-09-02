@@ -5,7 +5,7 @@ genrule(
     name = "bf_parser",
     srcs = ["bf_parser.y"],
     outs = ["bf_parser.c", "bf_parser.h"],
-    cmd = "/opt/homebrew/opt/bison/bin/bison -d -o $(location bf_parser.c) $(location bf_parser.y)",
+    cmd = "PATH=/opt/homebrew/opt/bison/bin:$$PATH bison -d -o $(location bf_parser.c) $(location bf_parser.y)",
 )
 
 # Generate lexer from flex grammar using system flex
