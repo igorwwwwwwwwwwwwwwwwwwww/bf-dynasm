@@ -45,7 +45,6 @@ static char* allocate_guarded_memory(size_t size) {
         return NULL;
     }
     
-    // mmap with MAP_ANONYMOUS already guarantees zero-initialized memory
     return data;
 }
 
