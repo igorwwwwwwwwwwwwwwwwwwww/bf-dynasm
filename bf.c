@@ -236,6 +236,7 @@ int main(int argc, char *argv[]) {
     bool profile_mode = false;
     const char *profile_output = NULL;
     size_t memory_size = BF_DEFAULT_MEMORY_SIZE;
+    size_t memory_offset = 4096;  // Default 4KB offset for negative access
     int arg_offset = 1;
 
     for (int i = 1; i < argc && argv[i][0] == '-'; i++) {
@@ -267,6 +268,19 @@ int main(int argc, char *argv[]) {
             }
             i++;
             arg_offset += 2;
+        } else if (strcmp(argv[i], "--memory-offset") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --memory-offset requires a size in bytes\n");
+                return 1;
+            }
+            char *endptr;
+            memory_offset = strtoul(argv[i + 1], &endptr, 10);
+            if (*endptr != '\0') {
+                fprintf(stderr, "Error: Invalid memory offset '%s'\n", argv[i + 1]);
+                return 1;
+            }
+            i++;
+            arg_offset += 2;
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             show_help = true;
             arg_offset++;
@@ -286,13 +300,22 @@ int main(int argc, char *argv[]) {
         fprintf(stream, "  --no-optimize     Disable AST optimizations\n");
         fprintf(stream, "  --profile file    Enable profiling (folded stack format)\n");
         fprintf(stream, "  --memory size     Set memory size in bytes (default: %zu)\n", (size_t)BF_DEFAULT_MEMORY_SIZE);
+        fprintf(stream, "  --memory-offset n Set initial pointer offset in bytes (default: 4096)\n");
         fprintf(stream, "\nExamples:\n");
         fprintf(stream, "  %s examples/hello.b\n", argv[0]);
         fprintf(stream, "  %s --debug examples/fizzbuzz.b\n", argv[0]);
         fprintf(stream, "  %s --no-optimize examples/mandelbrot.b\n", argv[0]);
         fprintf(stream, "  %s --profile profile.txt examples/mandelbrot.b\n", argv[0]);
         fprintf(stream, "  %s --memory 32768 examples/hello.b\n", argv[0]);
+        fprintf(stream, "  %s --memory-offset 8192 examples/program.b\n", argv[0]);
         return show_help ? 0 : 1;
+    }
+
+    // Validate memory offset
+    if (memory_offset >= memory_size) {
+        fprintf(stderr, "Error: Memory offset (%zu) must be less than memory size (%zu)\n", 
+                memory_offset, memory_size);
+        return 1;
     }
 
     size_t program_size;
@@ -344,7 +367,7 @@ int main(int argc, char *argv[]) {
         bf_error("Memory allocation failed");
     }
 
-    compiled_program(memory);
+    compiled_program(memory + memory_offset);
 
     if (profile_mode) {
         bf_prof_stop(&profiler);
