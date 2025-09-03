@@ -1,0 +1,66 @@
+# Folded stack format for flame graphs
+# Format: @line:col AST_NODE count
+
+@    5:   38 LOOP;@    7:   65 LOOP;@    7:   75 LOOP;@    8:   43 MOVE_PTR 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   12:   41 LOOP;@   14:   61 MOVE_PTR 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   16:   46 LOOP;@   18:   18 LOOP;@   18:   43 MOVE_PTR 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   28:   23 LOOP;@   28:   37 MOVE_PTR 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   30:   65 LOOP;@   30:   66 LOOP;@   30:   67 MOVE_PTR 2
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   30:   65 LOOP;@   31:   43 LOOP;@   31:   44 MOVE_PTR 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   32:   27 LOOP;@   32:   54 LOOP;@   32:   55 ADD_VAL 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   32:   27 LOOP;@   32:   54 LOOP;@   32:   68 LOOP;@   33:    2 COPY_CELL 2
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   32:   27 LOOP;@   32:   54 LOOP;@   32:   68 LOOP;@   33:   14 MOVE_PTR 2
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   32:   27 LOOP;@   33:   53 LOOP;@   33:   54 MOVE_PTR 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   32:   27 LOOP;@   33:   73 LOOP;@   34:   17 MOVE_PTR 8
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   32:   27 LOOP;@   34:   51 MOVE_PTR 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   34:   71 LOOP;@   35:    1 LOOP;@   35:    2 ADD_VAL 2
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   34:   71 LOOP;@   35:    1 LOOP;@   35:   30 COPY_CELL 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   34:   71 LOOP;@   35:    1 LOOP;@   35:   36 MOVE_PTR 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   34:   71 LOOP;@   35:   40 MOVE_PTR 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   35:   62 MOVE_PTR 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   37:   31 LOOP;@   37:   58 LOOP;@   37:   72 LOOP;@   38:   20 MOVE_PTR 2
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   37:   31 LOOP;@   38:   59 LOOP;@   38:   60 MOVE_PTR 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   37:   31 LOOP;@   38:   79 LOOP;@   39:   23 MOVE_PTR 2
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   39:   77 LOOP;@   40:    8 LOOP;@   40:    9 ADD_VAL 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   39:   77 LOOP;@   40:    8 LOOP;@   40:   16 MUL 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   39:   77 LOOP;@   40:    8 LOOP;@   40:   42 MOVE_PTR 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   39:   77 LOOP;@   40:   47 MOVE_PTR 2
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   42:   37 LOOP;@   43:   37 MOVE_PTR 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   44:    8 LOOP;@   44:    9 LOOP;@   44:   10 MOVE_PTR 2
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   44:    8 LOOP;@   44:   39 LOOP;@   44:   40 MOVE_PTR 5
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   46:   16 LOOP;@   46:   17 MOVE_PTR 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   61:   80 LOOP;@   62:   46 SET_CONST 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   63:   42 LOOP;@   63:   65 LOOP;@   63:   77 LOOP;@   64:   11 COPY_CELL 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   63:   42 LOOP;@   63:   65 LOOP;@   63:   77 LOOP;@   64:   23 MOVE_PTR 2
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   63:   42 LOOP;@   64:   62 LOOP;@   64:   63 MOVE_PTR 2
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   63:   42 LOOP;@   65:    2 LOOP;@   65:   26 MOVE_PTR 5
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   65:   80 LOOP;@   66:   10 LOOP;@   66:   39 COPY_CELL 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   65:   80 LOOP;@   66:   10 LOOP;@   66:   45 MOVE_PTR 2
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   68:   54 LOOP;@   68:   55 LOOP;@   68:   56 MOVE_PTR 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   68:   54 LOOP;@   69:    5 LOOP;@   69:    6 MOVE_PTR 2
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   68:   54 LOOP;@   69:   16 MOVE_PTR 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   75:   44 LOOP;@   76:   18 LOOP;@   76:   20 LOOP;@   77:    9 MOVE_PTR 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   81:   27 LOOP;@   81:   28 ADD_VAL 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   91:    8 LOOP;@   92:   14 LOOP;@   93:   73 MOVE_PTR 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   95:   61 LOOP;@   96:    7 COPY_CELL 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   96:   75 LOOP;@   96:   76 LOOP;@   96:   77 MOVE_PTR 2
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   97:   76 LOOP;@   97:   77 MOVE_PTR 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   98:   37 LOOP;@   98:   60 LOOP;@   99:   38 LOOP;@   99:   39 MOVE_PTR 2
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   98:   37 LOOP;@   99:   59 LOOP;@   99:   60 MOVE_PTR 2
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   98:   37 LOOP;@   99:   79 LOOP;@  100:    1 COPY_CELL 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   98:   37 LOOP;@   99:   79 LOOP;@  100:   23 MOVE_PTR 5
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@   98:   37 LOOP;@  100:   57 MOVE_PTR 2
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@  100:   77 LOOP;@  101:    8 LOOP;@  101:   36 COPY_CELL 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@  100:   77 LOOP;@  101:    8 LOOP;@  101:   42 MOVE_PTR 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@  100:   77 LOOP;@  101:   47 MOVE_PTR 4
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@  100:   77 LOOP;@  101:   60 MOVE_PTR 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@  102:    1 LOOP;@  102:    2 MOVE_PTR 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@  102:   42 LOOP;@  102:   69 LOOP;@  103:    3 LOOP;@  103:   21 COPY_CELL 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@  102:   42 LOOP;@  102:   69 LOOP;@  103:    3 LOOP;@  103:   35 MOVE_PTR 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@  102:   42 LOOP;@  103:   74 LOOP;@  103:   75 MOVE_PTR 5
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@  102:   42 LOOP;@  104:   14 LOOP;@  104:   17 COPY_CELL 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@  102:   42 LOOP;@  104:   14 LOOP;@  104:   39 MOVE_PTR 6
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@  105:   16 LOOP;@  105:   27 LOOP;@  105:   28 ADD_VAL 1
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@  105:   16 LOOP;@  105:   27 LOOP;@  105:   35 MUL 2
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@  105:   16 LOOP;@  105:   66 MOVE_PTR 2
+@    5:   38 LOOP;@    7:   65 LOOP;@   27:   43 LOOP;@  107:   71 LOOP;@  107:   72 LOOP;@  107:   73 MOVE_PTR 2
