@@ -292,37 +292,6 @@ ast_node_t* ast_optimize(ast_node_t *node) {
         return ast_optimize(node);
     }
 
-    // Offset ADD optimization: detect MOVE_PTR + ADD_VAL + MOVE_PTR patterns
-    if (node->type == AST_MOVE_PTR && node->next &&
-        node->next->type == AST_ADD_VAL && node->next->next &&
-        node->next->next->type == AST_MOVE_PTR &&
-        node->next->next->data.basic.count == -node->data.basic.count) {
-
-        int offset = node->data.basic.count;
-        int value = node->next->data.basic.count;
-        ast_node_t *third = node->next->next;
-
-        // Create ADD_VAL node with offset
-        ast_node_t *offset_add = ast_create_add(value, offset);
-        ast_copy_location(offset_add, node); // Preserve location from first node
-        offset_add->next = third->next;
-
-        // Free the three nodes we're replacing
-        free(node->next);
-        free(third);
-
-        // Replace current node
-        node->type = offset_add->type;
-        node->data = offset_add->data;
-        node->next = offset_add->next;
-        node->line = offset_add->line;
-        node->column = offset_add->column;
-        free(offset_add);
-
-        // Continue optimizing from current node
-        return ast_optimize(node);
-    }
-
     // Set + Add coalescing: detect SET_CONST followed by ADD_VAL at same offset
     if (node->type == AST_SET_CONST && node->next &&
         node->next->type == AST_ADD_VAL && node->next->data.basic.offset == 0) {
