@@ -15,26 +15,42 @@ static int getchar_wrapper(void) {
 
 // ARM64-specific copy cell optimization (copy only, no clearing)
 static void compile_bf_copy_cell(dasm_State **Dst, int src_offset, int dst_offset) {
-    // Load from source cell
-    if (src_offset >= -256 && src_offset <= 255) {
-        |  ldrb w0, [x19, #src_offset]   // Load from source cell at offset
+    // Load from source cell using base+offset addressing
+    if (src_offset == 0) {
+        |  ldrb w0, [x19, x20]               // Load from current position [base + current_offset]
+    } else if (src_offset > 0 && src_offset <= 4095) {
+        |  add x16, x20, #src_offset         // Compute effective offset
+        |  ldrb w0, [x19, x16]               // Load from [base + effective_offset]
+    } else if (src_offset < 0 && (-src_offset) <= 4095) {
+        |  sub x16, x20, #(-src_offset)      // Compute effective offset
+        |  ldrb w0, [x19, x16]               // Load from [base + effective_offset]
     } else {
-        |  add x19, x19, #src_offset     // Add src_offset to pointer
-        |  ldrb w0, [x19]                // Load from adjusted pointer
-        |  sub x19, x19, #src_offset     // Restore pointer
+        |  mov x16, #src_offset
+        |  add x16, x20, x16                 // Compute effective offset for large offsets
+        |  ldrb w0, [x19, x16]               // Load from [base + effective_offset]
     }
 
-    // Add to destination cell
-    if (dst_offset >= -256 && dst_offset <= 255) {
-        |  ldrb w1, [x19, #dst_offset]   // Load current destination value
-        |  add w0, w0, w1                // Add source to destination
-        |  strb w0, [x19, #dst_offset]   // Store to destination cell at offset
+    // Add to destination cell using base+offset addressing
+    if (dst_offset == 0) {
+        |  ldrb w1, [x19, x20]               // Load from current position [base + current_offset]
+        |  add w0, w0, w1                    // Add source to destination
+        |  strb w0, [x19, x20]               // Store to current position [base + current_offset]
+    } else if (dst_offset > 0 && dst_offset <= 4095) {
+        |  add x17, x20, #dst_offset         // Compute effective offset
+        |  ldrb w1, [x19, x17]               // Load from [base + effective_offset]
+        |  add w0, w0, w1                    // Add source to destination
+        |  strb w0, [x19, x17]               // Store to [base + effective_offset]
+    } else if (dst_offset < 0 && (-dst_offset) <= 4095) {
+        |  sub x17, x20, #(-dst_offset)      // Compute effective offset
+        |  ldrb w1, [x19, x17]               // Load from [base + effective_offset]
+        |  add w0, w0, w1                    // Add source to destination
+        |  strb w0, [x19, x17]               // Store to [base + effective_offset]
     } else {
-        |  add x19, x19, #dst_offset     // Add dst_offset to pointer
-        |  ldrb w1, [x19]                // Load current destination value
-        |  add w0, w0, w1                // Add source to destination
-        |  strb w0, [x19]                // Store to destination cell
-        |  sub x19, x19, #dst_offset     // Restore pointer
+        |  mov x17, #dst_offset
+        |  add x17, x20, x17                 // Compute effective offset for large offsets
+        |  ldrb w1, [x19, x17]               // Load from [base + effective_offset]
+        |  add w0, w0, w1                    // Add source to destination
+        |  strb w0, [x19, x17]               // Store to [base + effective_offset]
     }
     // Note: Source cell clearing is now handled by explicit SET_CONST(0)
 }
@@ -44,49 +60,70 @@ static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int
     // Skip zero multiplier
     if (multiplier == 0) return;
 
-    // Load source value
-    if (src_offset >= -256 && src_offset <= 255) {
-        |  ldrb w0, [x19, #src_offset]   // Load from source cell at offset
+    // Load source value using base+offset addressing
+    if (src_offset == 0) {
+        |  ldrb w0, [x19, x20]               // Load from current position [base + current_offset]
+    } else if (src_offset > 0 && src_offset <= 4095) {
+        |  add x16, x20, #src_offset         // Compute effective offset
+        |  ldrb w0, [x19, x16]               // Load from [base + effective_offset]
+    } else if (src_offset < 0 && (-src_offset) <= 4095) {
+        |  sub x16, x20, #(-src_offset)      // Compute effective offset
+        |  ldrb w0, [x19, x16]               // Load from [base + effective_offset]
     } else {
-        |  add x19, x19, #src_offset     // Add src_offset to pointer
-        |  ldrb w0, [x19]                // Load from adjusted pointer
-        |  sub x19, x19, #src_offset     // Restore pointer
+        |  mov x16, #src_offset
+        |  add x16, x20, x16                 // Compute effective offset for large offsets
+        |  ldrb w0, [x19, x16]               // Load from [base + effective_offset]
     }
 
-    // Compute target address in x16 (caller-saved)
-    if (dst_offset >= 0) {
-        |  add x16, x19, #dst_offset
+    // Compute target address using base+offset addressing
+    if (dst_offset == 0) {
+        |  ldrb w1, [x19, x20]               // Load from current position [base + current_offset]
+    } else if (dst_offset > 0 && dst_offset <= 4095) {
+        |  add x17, x20, #dst_offset         // Compute effective offset in x17
+        |  ldrb w1, [x19, x17]               // Load from [base + effective_offset]
+    } else if (dst_offset < 0 && (-dst_offset) <= 4095) {
+        |  sub x17, x20, #(-dst_offset)      // Compute effective offset in x17
+        |  ldrb w1, [x19, x17]               // Load from [base + effective_offset]
     } else {
-        |  sub x16, x19, #(-dst_offset)
+        |  mov x17, #dst_offset
+        |  add x17, x20, x17                 // Compute effective offset for large offsets
+        |  ldrb w1, [x19, x17]               // Load from [base + effective_offset]
     }
-    |  ldrb w1, [x16]           // Load target value
     |  mov w2, #multiplier      // Load multiplier
     |  mul w3, w0, w2           // Multiply source * multiplier
     |  add w1, w1, w3           // Add to target
-    |  strb w1, [x16]           // Store result
+    // Store to destination using the same addressing as load
+    if (dst_offset == 0) {
+        |  strb w1, [x19, x20]               // Store to current position [base + current_offset]
+    } else {
+        |  strb w1, [x19, x17]               // Store to [base + effective_offset] (x17 computed above)
+    }
 }
 
 static void compile_bf_prologue(dasm_State **Dst) {
-    |  stp x29, x30, [sp, #-32]!
+    |  stp x29, x30, [sp, #-48]!       // Expand stack frame for X20
     |  mov x29, sp
-    |  str x19, [sp, #16]
-    |  mov x19, x0
+    |  str x19, [sp, #16]              // Save X19 (base address register)
+    |  str x20, [sp, #24]              // Save X20 (offset register)
+    |  mov x19, x0                     // X19 = memory base address (passed parameter)
+    |  mov x20, #0                     // X20 = current offset (start at 0)
 }
 
 static void compile_bf_epilogue(dasm_State **Dst) {
     |  mov w0, #0
-    |  ldr x19, [sp, #16]
-    |  ldp x29, x30, [sp], #32
+    |  ldr x20, [sp, #24]              // Restore X20 (offset register)
+    |  ldr x19, [sp, #16]              // Restore X19 (base address register)
+    |  ldp x29, x30, [sp], #48         // Restore frame and adjust for expanded stack
     |  ret
 }
 
 static void compile_bf_loop_start(dasm_State **Dst, int loop_end) {
-    |  ldrb w0, [x19]
+    |  ldrb w0, [x19, x20]              // Load from base + current offset
     |  cbz w0, =>(loop_end)
 }
 
 static void compile_bf_loop_end(dasm_State **Dst, int back_to_start) {
-    |  ldrb w0, [x19]
+    |  ldrb w0, [x19, x20]              // Load from base + current offset
     |  cbnz w0, =>(back_to_start)
 }
 
@@ -101,100 +138,109 @@ static void compile_bf_debug_label(dasm_State **Dst, int debug_label) {
 
 // AST-based compilation wrapper functions
 static void compile_bf_move_ptr(dasm_State **Dst, int count) {
+    // Modify offset (X20) instead of base address (X19)
     if (count > 0) {
         if (count == 1) {
-            |  add x19, x19, #1
+            |  add x20, x20, #1
         } else if (count <= 4095) {
-            |  add x19, x19, #count
+            |  add x20, x20, #count
         } else {
             // Handle large counts that don't fit in immediate
             |  mov x16, #count
-            |  add x19, x19, x16
+            |  add x20, x20, x16
         }
     } else if (count < 0) {
         int abs_count = -count;
         if (abs_count == 1) {
-            |  sub x19, x19, #1
+            |  sub x20, x20, #1
         } else if (abs_count <= 4095) {
-            |  sub x19, x19, #abs_count
+            |  sub x20, x20, #abs_count
         } else {
             // Handle large counts that don't fit in immediate
             |  mov x16, #abs_count
-            |  sub x19, x19, x16
+            |  sub x20, x20, x16
         }
     }
 }
 
 static void compile_bf_add_val(dasm_State **Dst, int count, int offset) {
     if (offset == 0) {
-        // Normal ADD at current position
+        // ADD at current position: use [X19, X20] directly
         if (count > 0) {
             if (count == 1) {
-                |  ldrb w0, [x19]
+                |  ldrb w0, [x19, x20]
                 |  add w0, w0, #1
-                |  strb w0, [x19]
+                |  strb w0, [x19, x20]
             } else if (count <= 255) {
-                |  ldrb w0, [x19]
+                |  ldrb w0, [x19, x20]
                 |  add w0, w0, #count
-                |  strb w0, [x19]
+                |  strb w0, [x19, x20]
             } else {
-                // Handle large counts or overflow
-                |  ldrb w0, [x19]
+                // Handle large counts
+                |  ldrb w0, [x19, x20]
                 |  mov w16, #count
                 |  add w0, w0, w16
-                |  strb w0, [x19]
+                |  strb w0, [x19, x20]
             }
         } else if (count < 0) {
             int abs_count = -count;
             if (abs_count == 1) {
-                |  ldrb w0, [x19]
+                |  ldrb w0, [x19, x20]
                 |  sub w0, w0, #1
-                |  strb w0, [x19]
+                |  strb w0, [x19, x20]
             } else if (abs_count <= 255) {
-                |  ldrb w0, [x19]
+                |  ldrb w0, [x19, x20]
                 |  sub w0, w0, #abs_count
-                |  strb w0, [x19]
+                |  strb w0, [x19, x20]
             } else {
-                // Handle large counts or overflow
-                |  ldrb w0, [x19]
+                // Handle large counts
+                |  ldrb w0, [x19, x20]
                 |  mov w16, #abs_count
                 |  sub w0, w0, w16
-                |  strb w0, [x19]
+                |  strb w0, [x19, x20]
             }
         }
     } else {
-        // ADD at offset
+        // ADD at offset: compute effective offset in X16 = X20 + offset
+        if (offset > 0 && offset <= 4095) {
+            |  add x16, x20, #offset         // Compute effective offset
+        } else if (offset < 0 && (-offset) <= 4095) {
+            |  sub x16, x20, #(-offset)      // Compute effective offset
+        } else {
+            |  mov x17, #offset
+            |  add x16, x20, x17             // Compute effective offset for large offsets
+        }
+
         if (count > 0) {
-            if (count == 1 && offset >= -256 && offset <= 255) {
-                |  ldrb w0, [x19, #offset]       // Load from offset
-                |  add w0, w0, #1                // Increment
-                |  strb w0, [x19, #offset]       // Store back at offset
-            } else if (count <= 255 && offset >= -256 && offset <= 255) {
-                |  ldrb w0, [x19, #offset]       // Load from offset
-                |  add w0, w0, #count            // Add value
-                |  strb w0, [x19, #offset]       // Store back at offset
+            if (count == 1) {
+                |  ldrb w0, [x19, x16]
+                |  add w0, w0, #1
+                |  strb w0, [x19, x16]
+            } else if (count <= 255) {
+                |  ldrb w0, [x19, x16]
+                |  add w0, w0, #count
+                |  strb w0, [x19, x16]
             } else {
-                |  add x19, x19, #offset         // Add offset to pointer
-                |  ldrb w0, [x19]                // Load from adjusted pointer
-                |  add w0, w0, #count            // Add value
-                |  strb w0, [x19]                // Store back
-                |  sub x19, x19, #offset         // Restore pointer
+                |  ldrb w0, [x19, x16]
+                |  mov w17, #count
+                |  add w0, w0, w17
+                |  strb w0, [x19, x16]
             }
         } else if (count < 0) {
-            if (count == -1 && offset >= -256 && offset <= 255) {
-                |  ldrb w0, [x19, #offset]       // Load from offset
-                |  sub w0, w0, #1                // Decrement
-                |  strb w0, [x19, #offset]       // Store back at offset
-            } else if (count >= -255 && offset >= -256 && offset <= 255) {
-                |  ldrb w0, [x19, #offset]       // Load from offset
-                |  sub w0, w0, #(-count)         // Subtract value
-                |  strb w0, [x19, #offset]       // Store back at offset
+            int abs_count = -count;
+            if (abs_count == 1) {
+                |  ldrb w0, [x19, x16]
+                |  sub w0, w0, #1
+                |  strb w0, [x19, x16]
+            } else if (abs_count <= 255) {
+                |  ldrb w0, [x19, x16]
+                |  sub w0, w0, #abs_count
+                |  strb w0, [x19, x16]
             } else {
-                |  add x19, x19, #offset         // Add offset to pointer
-                |  ldrb w0, [x19]                // Load from adjusted pointer
-                |  sub w0, w0, #(-count)         // Subtract value
-                |  strb w0, [x19]                // Store back
-                |  sub x19, x19, #offset         // Restore pointer
+                |  ldrb w0, [x19, x16]
+                |  mov w17, #abs_count
+                |  sub w0, w0, w17
+                |  strb w0, [x19, x16]
             }
         }
     }
@@ -206,23 +252,41 @@ static void compile_bf_input(dasm_State **Dst, int offset) {
     |  movk x16, #((uintptr_t)getchar_wrapper >> 32) & 0xffff, lsl #32
     |  movk x16, #((uintptr_t)getchar_wrapper >> 48) & 0xffff, lsl #48
     |  blr x16
-    if (offset >= -256 && offset <= 255) {
-        |  strb w0, [x19, #offset]             // Store result at offset
+
+    if (offset == 0) {
+        // Store at current position: [X19, X20]
+        |  strb w0, [x19, x20]
     } else {
-        |  add x19, x19, #offset              // Add offset to pointer
-        |  strb w0, [x19]                     // Store result at adjusted pointer
-        |  sub x19, x19, #offset              // Restore pointer
+        // Store at offset: compute effective offset in X16 = X20 + offset
+        if (offset > 0 && offset <= 4095) {
+            |  add x16, x20, #offset         // Compute effective offset
+        } else if (offset < 0 && (-offset) <= 4095) {
+            |  sub x16, x20, #(-offset)      // Compute effective offset
+        } else {
+            |  mov x17, #offset
+            |  add x16, x20, x17             // Compute effective offset for large offsets
+        }
+        |  strb w0, [x19, x16]               // Store at base + effective offset
     }
 }
 
 static void compile_bf_output(dasm_State **Dst, int offset) {
-    if (offset >= -256 && offset <= 255) {
-        |  ldrb w0, [x19, #offset]            // Load byte from offset
+    if (offset == 0) {
+        // Load from current position: [X19, X20]
+        |  ldrb w0, [x19, x20]
     } else {
-        |  add x19, x19, #offset              // Add offset to pointer
-        |  ldrb w0, [x19]                     // Load byte from adjusted pointer
-        |  sub x19, x19, #offset              // Restore pointer
+        // Load from offset: compute effective offset in temp register
+        if (offset > 0 && offset <= 4095) {
+            |  add x21, x20, #offset         // Compute effective offset in X21
+        } else if (offset < 0 && (-offset) <= 4095) {
+            |  sub x21, x20, #(-offset)      // Compute effective offset in X21
+        } else {
+            |  mov x21, #offset
+            |  add x21, x20, x21             // Compute effective offset for large offsets
+        }
+        |  ldrb w0, [x19, x21]               // Load from base + effective offset
     }
+
     |  sxtb w0, w0
     |  mov x16, #(uintptr_t)putchar_wrapper & 0xffff
     |  movk x16, #((uintptr_t)putchar_wrapper >> 16) & 0xffff, lsl #16
@@ -233,29 +297,28 @@ static void compile_bf_output(dasm_State **Dst, int offset) {
 
 // ARM64-specific set constant optimization
 static void compile_bf_set_const(dasm_State **Dst, int value, int offset) {
-    if (offset >= -256 && offset <= 255) {
-        if (value == 0) {
-            |  mov w0, #0                     // Load zero
-            |  strb w0, [x19, #offset]        // Set to zero at offset
-        } else if (value > 0 && value <= 255) {
-            |  mov w0, #value                 // Load positive value
-            |  strb w0, [x19, #offset]        // Set value at offset
-        } else {
-            |  mov w0, #(value & 0xFF)        // Load value (truncate to byte)
-            |  strb w0, [x19, #offset]        // Set value at offset
-        }
+    // Load the value to set
+    if (value == 0) {
+        |  mov w0, #0                        // Load zero
+    } else if (value > 0 && value <= 255) {
+        |  mov w0, #value                    // Load positive value
     } else {
-        |  add x19, x19, #offset          // Add offset to pointer
-        if (value == 0) {
-            |  mov w0, #0                     // Load zero
-            |  strb w0, [x19]                 // Set to zero
-        } else if (value > 0 && value <= 255) {
-            |  mov w0, #value                 // Load positive value
-            |  strb w0, [x19]                 // Set value
+        |  mov w0, #(value & 0xFF)           // Load value (truncate to byte)
+    }
+
+    if (offset == 0) {
+        // Store at current position: [X19, X20]
+        |  strb w0, [x19, x20]
+    } else {
+        // Store at offset: compute effective offset in X16 = X20 + offset
+        if (offset > 0 && offset <= 4095) {
+            |  add x16, x20, #offset         // Compute effective offset
+        } else if (offset < 0 && (-offset) <= 4095) {
+            |  sub x16, x20, #(-offset)      // Compute effective offset
         } else {
-            |  mov w0, #(value & 0xFF)        // Load value (truncate to byte)
-            |  strb w0, [x19]                 // Set value
+            |  mov x17, #offset
+            |  add x16, x20, x17             // Compute effective offset for large offsets
         }
-        |  sub x19, x19, #offset          // Restore pointer
+        |  strb w0, [x19, x16]               // Store at base + effective offset
     }
 }
