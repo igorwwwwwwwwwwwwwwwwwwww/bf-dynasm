@@ -15,15 +15,17 @@ static int getchar_wrapper(void) {
 
 // AMD64-specific copy cell optimization (copy only, no clearing)
 static void compile_bf_copy_cell(dasm_State **Dst, int src_offset, int dst_offset) {
-    // Load from source cell using base+offset addressing
+    // Load from source cell using base+offset addressing with masking
     |  mov rax, rcx                 // rax = current offset
     |  add rax, src_offset          // rax = current offset + src_offset
-    |  mov dl, [rbx+rax]            // Load from base[offset + src_offset]
+    |  and rax, rdx                 // rax = masked offset
+    |  movzx r8d, byte [rbx+rax]    // Load from base[masked_offset] into R8
 
-    // Store to destination cell using base+offset addressing
+    // Store to destination cell using base+offset addressing with masking
     |  mov rax, rcx                 // rax = current offset
     |  add rax, dst_offset          // rax = current offset + dst_offset
-    |  add [rbx+rax], dl            // Add to base[offset + dst_offset]
+    |  and rax, rdx                 // rax = masked offset
+    |  add byte [rbx+rax], r8b      // Add to base[masked_offset]
     // Note: Source cell clearing is now handled by explicit SET_CONST(0)
 }
 
@@ -32,48 +34,68 @@ static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int
     // Skip zero multiplier
     if (multiplier == 0) return;
 
-    // Load source value using base+offset addressing
+    // Load source value using base+offset addressing with masking
     |  mov rax, rcx                 // rax = current offset
     |  add rax, src_offset          // rax = current offset + src_offset
-    |  mov dl, [rbx+rax]            // Load from base[offset + src_offset]
+    |  and rax, rdx                 // rax = masked offset
+    |  movzx r8d, byte [rbx+rax]    // Load from base[masked_offset] into R8
 
     if (multiplier == 1) {
         // Optimized case: just add source to target
         |  mov rax, rcx             // rax = current offset
         |  add rax, dst_offset      // rax = current offset + dst_offset
-        |  add [rbx+rax], dl        // target += source
+        |  and rax, rdx             // rax = masked offset
+        |  add byte [rbx+rax], r8b  // target += source
     } else if (multiplier == -1) {
         // Optimized case: subtract source from target
         |  mov rax, rcx             // rax = current offset
         |  add rax, dst_offset      // rax = current offset + dst_offset
-        |  sub [rbx+rax], dl        // target -= source
+        |  and rax, rdx             // rax = masked offset
+        |  sub byte [rbx+rax], r8b  // target -= source
     } else {
         // General case: target += source * multiplier
-        |  movzx edx, dl            // edx = source (zero-extend to 32-bit)
-        |  mov esi, multiplier      // esi = multiplier
-        |  imul edx, esi            // edx = source * multiplier
+        |  mov r9d, multiplier      // r9d = multiplier
+        |  imul r8d, r9d            // r8d = source * multiplier
         |  mov rax, rcx             // rax = current offset
         |  add rax, dst_offset      // rax = current offset + dst_offset
-        |  add [rbx+rax], dl        // target += product (use low 8 bits)
+        |  and rax, rdx             // rax = masked offset
+        |  add byte [rbx+rax], r8b  // target += product (use low 8 bits)
     }
 
     // Note: Counter clearing is now handled by explicit SET_CONST(0) after MUL
 }
 
 static void compile_bf_prologue(dasm_State **Dst, size_t memory_size) {
-    (void)memory_size; // Memory size not used yet (no masking for AMD64)
     |  push rbp
     |  mov rbp, rsp
-    |  push rbx         // Save RBX (base address register)  
+    |  push rbx         // Save RBX (base address register)
     |  push rcx         // Save RCX (offset register)
+    |  push rdx         // Save RDX (mask register)
+    |  push r8          // Save R8 (temporary register)
+    |  push r9          // Save R9 (temporary register)
     |  sub rsp, 8       // Align stack for function calls (16-byte alignment)
     |  mov rbx, rdi     // RBX = memory base address (passed parameter)
     |  xor rcx, rcx     // RCX = current offset (start at 0)
+
+    // Compute address mask (memory_size - 1) and store in RDX
+    size_t mask = memory_size - 1;
+    if (mask <= 0xFF) {
+        |  mov edx, mask
+    } else if (mask <= 0xFFFF) {
+        |  mov edx, mask
+    } else if (mask <= 0xFFFFFFFF) {
+        |  mov edx, mask
+    } else {
+        |  mov rdx, mask
+    }
 }
 
 static void compile_bf_epilogue(dasm_State **Dst) {
     |  xor eax, eax
     |  add rsp, 8       // Remove alignment padding
+    |  pop r9           // Restore R9 (temporary register)
+    |  pop r8           // Restore R8 (temporary register)
+    |  pop rdx          // Restore RDX (mask register)
     |  pop rcx          // Restore RCX (offset register)
     |  pop rbx          // Restore RBX (base address register)
     |  pop rbp
@@ -81,12 +103,16 @@ static void compile_bf_epilogue(dasm_State **Dst) {
 }
 
 static void compile_bf_loop_start(dasm_State **Dst, int loop_end) {
-    |  cmp byte [rbx+rcx], 0  // Compare value at base[offset]
+    |  mov rax, rcx           // rax = current offset
+    |  and rax, rdx           // rax = masked offset
+    |  cmp byte [rbx+rax], 0  // Compare value at base[masked_offset]
     |  je =>(loop_end)
 }
 
 static void compile_bf_loop_end(dasm_State **Dst, int back_to_start) {
-    |  cmp byte [rbx+rcx], 0  // Compare value at base[offset]
+    |  mov rax, rcx           // rax = current offset
+    |  and rax, rdx           // rax = masked offset
+    |  cmp byte [rbx+rax], 0  // Compare value at base[masked_offset]
     |  jne =>(back_to_start)
 }
 
@@ -120,36 +146,39 @@ static void compile_bf_move_ptr(dasm_State **Dst, int count) {
 static void compile_bf_add_val(dasm_State **Dst, int count, int offset) {
     if (offset == 0) {
         // Normal ADD at current position
+        |  mov rax, rcx              // rax = current offset
+        |  and rax, rdx              // rax = masked offset
         if (count > 0) {
             if (count == 1) {
-                |  inc byte [rbx+rcx]
+                |  inc byte [rbx+rax]
             } else {
-                |  add byte [rbx+rcx], count
+                |  add byte [rbx+rax], count
             }
         } else if (count < 0) {
             int abs_count = -count;
             if (abs_count == 1) {
-                |  dec byte [rbx+rcx]
+                |  dec byte [rbx+rax]
             } else {
-                |  sub byte [rbx+rcx], abs_count
+                |  sub byte [rbx+rax], abs_count
             }
         }
     } else {
-        // ADD at offset using base+offset addressing
+        // ADD at offset using base+offset addressing with masking
         |  mov rax, rcx              // rax = current offset
         |  add rax, offset           // rax = current offset + additional offset
+        |  and rax, rdx              // rax = masked offset
         if (count > 0) {
             if (count == 1) {
-                |  inc byte [rbx+rax]    // Increment at base[offset + additional_offset]
+                |  inc byte [rbx+rax]    // Increment at base[masked_offset]
             } else {
-                |  add byte [rbx+rax], count  // Add value at base[offset + additional_offset]
+                |  add byte [rbx+rax], count  // Add value at base[masked_offset]
             }
         } else if (count < 0) {
             int abs_count = -count;
             if (abs_count == 1) {
-                |  dec byte [rbx+rax]    // Decrement at base[offset + additional_offset]
+                |  dec byte [rbx+rax]    // Decrement at base[masked_offset]
             } else {
-                |  sub byte [rbx+rax], abs_count  // Subtract value at base[offset + additional_offset]
+                |  sub byte [rbx+rax], abs_count  // Subtract value at base[masked_offset]
             }
         }
     }
@@ -157,51 +186,64 @@ static void compile_bf_add_val(dasm_State **Dst, int count, int offset) {
 
 static void compile_bf_input(dasm_State **Dst, int offset) {
     |  push rcx                              // Save RCX (offset register) before function call
+    |  push rdx                              // Save RDX (mask register) before function call
     |  mov64 rax, (uintptr_t)getchar_wrapper   // Load function pointer
     |  call rax                               // Call through register
+    |  pop rdx                               // Restore RDX (mask register) after function call
     |  pop rcx                               // Restore RCX (offset register) after function call
     if (offset == 0) {
-        |  mov [rbx+rcx], al                  // Store result at base[offset]
+        |  mov rsi, rcx                       // rsi = current offset
+        |  and rsi, rdx                       // rsi = masked offset
+        |  mov [rbx+rsi], al                  // Store result at base[masked_offset]
     } else {
-        |  mov rdx, rcx                       // rdx = current offset
-        |  add rdx, offset                    // rdx = current offset + additional offset
-        |  mov [rbx+rdx], al                  // Store result at base[offset + additional_offset]
+        |  mov rsi, rcx                       // rsi = current offset
+        |  add rsi, offset                    // rsi = current offset + additional offset
+        |  and rsi, rdx                       // rsi = masked offset
+        |  mov [rbx+rsi], al                  // Store result at base[masked_offset]
     }
 }
 
 static void compile_bf_output(dasm_State **Dst, int offset) {
     if (offset == 0) {
-        |  movzx edi, byte [rbx+rcx]          // Load byte from base[offset] and put in first argument register
+        |  mov rax, rcx                       // rax = current offset
+        |  and rax, rdx                       // rax = masked offset
+        |  movzx edi, byte [rbx+rax]          // Load byte from base[masked_offset] and put in first argument register
     } else {
         |  mov rax, rcx                       // rax = current offset
         |  add rax, offset                    // rax = current offset + additional offset
-        |  movzx edi, byte [rbx+rax]          // Load byte from base[offset + additional_offset] and put in first argument register
+        |  and rax, rdx                       // rax = masked offset
+        |  movzx edi, byte [rbx+rax]          // Load byte from base[masked_offset] and put in first argument register
     }
     |  push rcx                              // Save RCX (offset register) before function call
+    |  push rdx                              // Save RDX (mask register) before function call
     |  mov64 rax, (uintptr_t)putchar_wrapper  // Load function pointer into rax
     |  call rax                               // Call through register
+    |  pop rdx                               // Restore RDX (mask register) after function call
     |  pop rcx                               // Restore RCX (offset register) after function call
 }
 
 // AMD64-specific set constant optimization
 static void compile_bf_set_const(dasm_State **Dst, int value, int offset) {
     if (offset == 0) {
+        |  mov rax, rcx              // rax = current offset
+        |  and rax, rdx              // rax = masked offset
         if (value == 0) {
-            |  mov byte [rbx+rcx], 0          // Set to zero at base[offset]
+            |  mov byte [rbx+rax], 0          // Set to zero at base[masked_offset]
         } else if (value > 0 && value <= 255) {
-            |  mov byte [rbx+rcx], value      // Set positive value at base[offset]
+            |  mov byte [rbx+rax], value      // Set positive value at base[masked_offset]
         } else {
-            |  mov byte [rbx+rcx], (value & 0xFF)  // Set value at base[offset] (truncate to byte)
+            |  mov byte [rbx+rax], (value & 0xFF)  // Set value at base[masked_offset] (truncate to byte)
         }
     } else {
         |  mov rax, rcx              // rax = current offset
         |  add rax, offset           // rax = current offset + additional offset
+        |  and rax, rdx              // rax = masked offset
         if (value == 0) {
-            |  mov byte [rbx+rax], 0          // Set to zero at base[offset + additional_offset]
+            |  mov byte [rbx+rax], 0          // Set to zero at base[masked_offset]
         } else if (value > 0 && value <= 255) {
-            |  mov byte [rbx+rax], value      // Set positive value at base[offset + additional_offset]
+            |  mov byte [rbx+rax], value      // Set positive value at base[masked_offset]
         } else {
-            |  mov byte [rbx+rax], (value & 0xFF)  // Set value at base[offset + additional_offset] (truncate to byte)
+            |  mov byte [rbx+rax], (value & 0xFF)  // Set value at base[masked_offset] (truncate to byte)
         }
     }
 }
