@@ -184,7 +184,7 @@ static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label
     return next_label;
 }
 
-static bf_func compile_bf_ast(ast_node_t *ast, bool debug_mode, void **code_ptr, size_t *code_size, bf_debug_info_t *debug_info) {
+static bf_func compile_bf_ast(ast_node_t *ast, bool debug_mode, void **code_ptr, size_t *code_size, bf_debug_info_t *debug_info, size_t memory_size) {
     dasm_State *state = NULL;
     dasm_State **Dst = &state;
     dasm_init(Dst, 1);
@@ -193,7 +193,7 @@ static bf_func compile_bf_ast(ast_node_t *ast, bool debug_mode, void **code_ptr,
     int debug_label_count = debug_info ? ast_count_nodes(ast) : 0;
     dasm_growpc(Dst, MAX_NESTING * 2 + debug_label_count);
 
-    compile_bf_prologue(Dst);
+    compile_bf_prologue(Dst, memory_size);
 
     int debug_label_counter = MAX_NESTING * 2; // Start debug labels after loop labels
     ast_compile_direct(ast, Dst, 0, debug_info, debug_info ? &debug_label_counter : NULL);
@@ -388,7 +388,9 @@ int main(int argc, char *argv[]) {
 
     void *code_ptr = NULL;
     size_t code_size = 0;
-    compiled_program = compile_bf_ast(ast, debug_mode, &code_ptr, &code_size, debug_ptr);
+    // Adjust memory size for JIT compilation to account for offset
+    size_t effective_memory_size = memory_size - memory_offset;
+    compiled_program = compile_bf_ast(ast, debug_mode, &code_ptr, &code_size, debug_ptr, effective_memory_size);
 
     if (timing_mode) {
         double phase_end = get_time_ms();

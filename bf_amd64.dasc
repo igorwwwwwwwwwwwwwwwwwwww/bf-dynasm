@@ -89,7 +89,8 @@ static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int
     // Note: Counter clearing is now handled by explicit SET_CONST(0) after MUL
 }
 
-static void compile_bf_prologue(dasm_State **Dst) {
+static void compile_bf_prologue(dasm_State **Dst, size_t memory_size) {
+    (void)memory_size; // Unused for now - AMD64 implementation pending
     |  push rbp
     |  mov rbp, rsp
     |  push rdi         // Save memory pointer
