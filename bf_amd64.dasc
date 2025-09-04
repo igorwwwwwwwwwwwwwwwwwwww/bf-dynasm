@@ -15,25 +15,15 @@ static int getchar_wrapper(void) {
 
 // AMD64-specific copy cell optimization (copy only, no clearing)
 static void compile_bf_copy_cell(dasm_State **Dst, int src_offset, int dst_offset) {
-    |  mov rax, [rsp+8]              // Load memory pointer
+    // Load from source cell using base+offset addressing
+    |  mov rax, rcx                 // rax = current offset
+    |  add rax, src_offset          // rax = current offset + src_offset
+    |  mov dl, [rbx+rax]            // Load from base[offset + src_offset]
 
-    // Load from source cell
-    if (src_offset >= -128 && src_offset <= 127) {
-        |  mov dl, [rax+src_offset]  // Load from source cell at offset
-    } else {
-        |  add rax, src_offset       // Add src_offset to pointer
-        |  mov dl, [rax]             // Load from adjusted pointer
-        |  sub rax, src_offset       // Restore pointer
-    }
-
-    // Add to destination cell
-    if (dst_offset >= -128 && dst_offset <= 127) {
-        |  add [rax+dst_offset], dl  // Add to destination cell at offset
-    } else {
-        |  add rax, dst_offset       // Add dst_offset to pointer
-        |  add [rax], dl             // Add to destination cell
-        |  sub rax, dst_offset       // Restore pointer
-    }
+    // Store to destination cell using base+offset addressing
+    |  mov rax, rcx                 // rax = current offset
+    |  add rax, dst_offset          // rax = current offset + dst_offset
+    |  add [rbx+rax], dl            // Add to base[offset + dst_offset]
     // Note: Source cell clearing is now handled by explicit SET_CONST(0)
 }
 
@@ -42,77 +32,61 @@ static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int
     // Skip zero multiplier
     if (multiplier == 0) return;
 
-    // Load memory pointer and source value
-    |  mov rax, [rsp+8]         // Load memory pointer
-
-    // Load from source cell
-    if (src_offset >= -128 && src_offset <= 127) {
-        |  mov cl, [rax+src_offset]  // Load from source cell at offset
-    } else {
-        |  add rax, src_offset       // Add src_offset to pointer
-        |  mov cl, [rax]             // Load from adjusted pointer
-        |  sub rax, src_offset       // Restore pointer
-    }
+    // Load source value using base+offset addressing
+    |  mov rax, rcx                 // rax = current offset
+    |  add rax, src_offset          // rax = current offset + src_offset
+    |  mov dl, [rbx+rax]            // Load from base[offset + src_offset]
 
     if (multiplier == 1) {
         // Optimized case: just add source to target
-        if (dst_offset >= -128 && dst_offset <= 127) {
-            |  add [rax+dst_offset], cl      // target += source
-        } else {
-            |  add rax, dst_offset           // adjust pointer
-            |  add [rax], cl                 // add source
-            |  sub rax, dst_offset           // restore pointer
-        }
+        |  mov rax, rcx             // rax = current offset
+        |  add rax, dst_offset      // rax = current offset + dst_offset
+        |  add [rbx+rax], dl        // target += source
     } else if (multiplier == -1) {
         // Optimized case: subtract source from target
-        if (dst_offset >= -128 && dst_offset <= 127) {
-            |  sub [rax+dst_offset], cl      // target -= source
-        } else {
-            |  add rax, dst_offset           // adjust pointer
-            |  sub [rax], cl                 // subtract source
-            |  sub rax, dst_offset           // restore pointer
-        }
+        |  mov rax, rcx             // rax = current offset
+        |  add rax, dst_offset      // rax = current offset + dst_offset
+        |  sub [rbx+rax], dl        // target -= source
     } else {
         // General case: target += source * multiplier
-        |  movzx edx, cl             // edx = source (zero-extend to 32-bit)
-        |  mov esi, multiplier       // esi = multiplier (use caller-saved ESI instead of EBX)
-        |  imul edx, esi             // edx = source * multiplier
-        if (dst_offset >= -128 && dst_offset <= 127) {
-            |  add [rax+dst_offset], dl      // target += product (use low 8 bits)
-        } else {
-            |  add rax, dst_offset           // adjust pointer
-            |  add [rax], dl                 // add product (use low 8 bits)
-            |  sub rax, dst_offset           // restore pointer
-        }
+        |  movzx edx, dl            // edx = source (zero-extend to 32-bit)
+        |  mov esi, multiplier      // esi = multiplier
+        |  imul edx, esi            // edx = source * multiplier
+        |  mov rax, rcx             // rax = current offset
+        |  add rax, dst_offset      // rax = current offset + dst_offset
+        |  add [rbx+rax], dl        // target += product (use low 8 bits)
     }
 
     // Note: Counter clearing is now handled by explicit SET_CONST(0) after MUL
 }
 
 static void compile_bf_prologue(dasm_State **Dst, size_t memory_size) {
-    (void)memory_size; // Unused for now - AMD64 implementation pending
+    (void)memory_size; // Memory size not used yet (no masking for AMD64)
     |  push rbp
     |  mov rbp, rsp
-    |  push rdi         // Save memory pointer
+    |  push rbx         // Save RBX (base address register)  
+    |  push rcx         // Save RCX (offset register)
     |  sub rsp, 8       // Align stack for function calls (16-byte alignment)
+    |  mov rbx, rdi     // RBX = memory base address (passed parameter)
+    |  xor rcx, rcx     // RCX = current offset (start at 0)
 }
 
 static void compile_bf_epilogue(dasm_State **Dst) {
     |  xor eax, eax
-    |  add rsp, 16      // Remove alignment padding and memory pointer
+    |  add rsp, 8       // Remove alignment padding
+    |  pop rcx          // Restore RCX (offset register)
+    |  pop rbx          // Restore RBX (base address register)
     |  pop rbp
     |  ret
 }
 
 static void compile_bf_loop_start(dasm_State **Dst, int loop_end) {
-    |  mov rax, [rsp+8]      // Load memory pointer from stack
-    |  cmp byte [rax], 0     // Compare value at memory pointer
+    |  cmp byte [rbx+rcx], 0  // Compare value at base[offset]
     |  je =>(loop_end)
 }
 
 static void compile_bf_loop_end(dasm_State **Dst, int back_to_start) {
-    |  mov rax, [rsp+8]      // Load memory pointer from stack
-    |  cmp byte [rax], 0     // Compare value at memory pointer
+    |  cmp byte [rbx+rcx], 0  // Compare value at base[offset]
     |  jne =>(back_to_start)
 }
 
@@ -129,16 +103,16 @@ static void compile_bf_debug_label(dasm_State **Dst, int debug_label) {
 static void compile_bf_move_ptr(dasm_State **Dst, int count) {
     if (count > 0) {
         if (count == 1) {
-            |  add qword [rsp+8], 1
+            |  add rcx, 1
         } else {
-            |  add qword [rsp+8], count
+            |  add rcx, count
         }
     } else if (count < 0) {
         int abs_count = -count;
         if (abs_count == 1) {
-            |  sub qword [rsp+8], 1
+            |  sub rcx, 1
         } else {
-            |  sub qword [rsp+8], abs_count
+            |  sub rcx, abs_count
         }
     }
 }
@@ -148,96 +122,86 @@ static void compile_bf_add_val(dasm_State **Dst, int count, int offset) {
         // Normal ADD at current position
         if (count > 0) {
             if (count == 1) {
-                |  mov rax, [rsp+8]
-                |  inc byte [rax]
-            } else if (count <= 127) {
-                |  mov rax, [rsp+8]
-                |  add byte [rax], count
+                |  inc byte [rbx+rcx]
             } else {
-                |  mov rax, [rsp+8]
-                |  add byte [rax], count  // x86 allows larger immediates
+                |  add byte [rbx+rcx], count
             }
         } else if (count < 0) {
             int abs_count = -count;
             if (abs_count == 1) {
-                |  mov rax, [rsp+8]
-                |  dec byte [rax]
-            } else if (abs_count <= 127) {
-                |  mov rax, [rsp+8]
-                |  sub byte [rax], abs_count
+                |  dec byte [rbx+rcx]
             } else {
-                |  mov rax, [rsp+8]
-                |  sub byte [rax], abs_count  // x86 allows larger immediates
+                |  sub byte [rbx+rcx], abs_count
             }
         }
     } else {
-        // ADD at offset
-        |  mov rax, [rsp+8]              // Load memory pointer
+        // ADD at offset using base+offset addressing
+        |  mov rax, rcx              // rax = current offset
+        |  add rax, offset           // rax = current offset + additional offset
         if (count > 0) {
-            if (count == 1 && offset >= -128 && offset <= 127) {
-                |  inc byte [rax+offset]     // Increment at offset
-            } else if (count <= 127 && offset >= -128 && offset <= 127) {
-                |  add byte [rax+offset], count  // Add value at offset
+            if (count == 1) {
+                |  inc byte [rbx+rax]    // Increment at base[offset + additional_offset]
             } else {
-                |  add rax, offset           // Add offset to pointer
-                |  add byte [rax], count     // Add value at adjusted pointer
+                |  add byte [rbx+rax], count  // Add value at base[offset + additional_offset]
             }
         } else if (count < 0) {
-            if (count == -1 && offset >= -128 && offset <= 127) {
-                |  dec byte [rax+offset]     // Decrement at offset
-            } else if (count >= -127 && offset >= -128 && offset <= 127) {
-                |  sub byte [rax+offset], -count  // Subtract value at offset
+            int abs_count = -count;
+            if (abs_count == 1) {
+                |  dec byte [rbx+rax]    // Decrement at base[offset + additional_offset]
             } else {
-                |  add rax, offset           // Add offset to pointer
-                |  sub byte [rax], -count    // Subtract value at adjusted pointer
+                |  sub byte [rbx+rax], abs_count  // Subtract value at base[offset + additional_offset]
             }
         }
     }
 }
 
 static void compile_bf_input(dasm_State **Dst, int offset) {
+    |  push rcx                              // Save RCX (offset register) before function call
     |  mov64 rax, (uintptr_t)getchar_wrapper   // Load function pointer
     |  call rax                               // Call through register
-    |  mov rdx, [rsp+8]                       // Load memory pointer from stack
-    if (offset >= -128 && offset <= 127) {
-        |  mov [rdx+offset], al               // Store result at offset
+    |  pop rcx                               // Restore RCX (offset register) after function call
+    if (offset == 0) {
+        |  mov [rbx+rcx], al                  // Store result at base[offset]
     } else {
-        |  add rdx, offset                    // Add offset to pointer
-        |  mov [rdx], al                      // Store result at adjusted pointer
+        |  mov rdx, rcx                       // rdx = current offset
+        |  add rdx, offset                    // rdx = current offset + additional offset
+        |  mov [rbx+rdx], al                  // Store result at base[offset + additional_offset]
     }
 }
 
 static void compile_bf_output(dasm_State **Dst, int offset) {
-    |  mov rax, [rsp+8]                       // Load memory pointer from stack
-    if (offset >= -128 && offset <= 127) {
-        |  movzx edi, byte [rax+offset]       // Load byte from offset and put in first argument register
+    if (offset == 0) {
+        |  movzx edi, byte [rbx+rcx]          // Load byte from base[offset] and put in first argument register
     } else {
-        |  add rax, offset                    // Add offset to pointer
-        |  movzx edi, byte [rax]              // Load byte and put in first argument register
+        |  mov rax, rcx                       // rax = current offset
+        |  add rax, offset                    // rax = current offset + additional offset
+        |  movzx edi, byte [rbx+rax]          // Load byte from base[offset + additional_offset] and put in first argument register
     }
+    |  push rcx                              // Save RCX (offset register) before function call
     |  mov64 rax, (uintptr_t)putchar_wrapper  // Load function pointer into rax
     |  call rax                               // Call through register
+    |  pop rcx                               // Restore RCX (offset register) after function call
 }
 
 // AMD64-specific set constant optimization
 static void compile_bf_set_const(dasm_State **Dst, int value, int offset) {
-    |  mov rax, [rsp+8]              // Load memory pointer
-    if (offset >= -128 && offset <= 127) {
+    if (offset == 0) {
         if (value == 0) {
-            |  mov byte [rax+offset], 0          // Set to zero at offset
+            |  mov byte [rbx+rcx], 0          // Set to zero at base[offset]
         } else if (value > 0 && value <= 255) {
-            |  mov byte [rax+offset], value      // Set positive value at offset
+            |  mov byte [rbx+rcx], value      // Set positive value at base[offset]
         } else {
-            |  mov byte [rax+offset], (value & 0xFF)  // Set value at offset (truncate to byte)
+            |  mov byte [rbx+rcx], (value & 0xFF)  // Set value at base[offset] (truncate to byte)
         }
     } else {
-        |  add rax, offset           // Add offset to pointer
+        |  mov rax, rcx              // rax = current offset
+        |  add rax, offset           // rax = current offset + additional offset
         if (value == 0) {
-            |  mov byte [rax], 0          // Set to zero
+            |  mov byte [rbx+rax], 0          // Set to zero at base[offset + additional_offset]
         } else if (value > 0 && value <= 255) {
-            |  mov byte [rax], value      // Set positive value
+            |  mov byte [rbx+rax], value      // Set positive value at base[offset + additional_offset]
         } else {
-            |  mov byte [rax], (value & 0xFF)  // Set value (truncate to byte)
+            |  mov byte [rbx+rax], (value & 0xFF)  // Set value at base[offset + additional_offset] (truncate to byte)
         }
     }
 }
