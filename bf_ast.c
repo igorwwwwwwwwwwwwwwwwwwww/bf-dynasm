@@ -208,64 +208,6 @@ ast_node_t* ast_optimize(ast_node_t *node) {
         }
     }
 
-    // Copy loop optimization: detect copy patterns before recursive optimization
-    if (node->type == AST_LOOP && node->data.loop.body) {
-        ast_node_t *curr = node->data.loop.body;
-
-        // Pattern 1: [>+<-] -> MOVE_PTR(offset) -> ADD_VAL(1) -> MOVE_PTR(-offset) -> ADD_VAL(-1)
-        if (curr->type == AST_MOVE_PTR &&
-            curr->next && curr->next->type == AST_ADD_VAL && curr->next->data.basic.count == 1 &&
-            curr->next->next && curr->next->next->type == AST_MOVE_PTR &&
-            curr->next->next->data.basic.count == -curr->data.basic.count &&
-            curr->next->next->next && curr->next->next->next->type == AST_ADD_VAL &&
-            curr->next->next->next->data.basic.count == -1 &&
-            !curr->next->next->next->next) {
-            // This is [>+<-] -> [MOVE+MOVE_BACK-] which copies current cell to offset and clears current
-            int offset = curr->data.basic.count;
-            // Replace with copy cell operation followed by explicit clear
-            ast_free(node->data.loop.body);
-
-            // Create COPY_CELL (copy only, no clear) - preserve location from original loop
-            node->type = AST_COPY_CELL;
-            node->data.copy.src_offset = 0;   // src is current position
-            node->data.copy.dst_offset = offset;  // dst is at offset
-
-            // Create SET_CONST(0) for explicit clearing and chain it
-            ast_node_t *clear_node = ast_create_set_const(0, 0);
-            ast_copy_location(clear_node, node); // Copy location from loop to clear
-            node->next = ast_create_sequence(clear_node, node->next);
-
-            // Continue optimizing from current node
-            return ast_optimize(node);
-        }
-
-        // Pattern 2: [-<+>] -> ADD_VAL(-1) -> MOVE_PTR(offset) -> ADD_VAL(1) -> MOVE_PTR(-offset)
-        else if (curr->type == AST_ADD_VAL && curr->data.basic.count == -1 &&
-            curr->next && curr->next->type == AST_MOVE_PTR &&
-            curr->next->next && curr->next->next->type == AST_ADD_VAL && curr->next->next->data.basic.count == 1 &&
-            curr->next->next->next && curr->next->next->next->type == AST_MOVE_PTR &&
-            curr->next->next->next->data.basic.count == -curr->next->data.basic.count &&
-            !curr->next->next->next->next) {
-            // This is [-<+>] -> [-MOVE+MOVE_BACK] which copies current cell to offset and clears current
-            int offset = curr->next->data.basic.count;
-            // Replace with copy cell operation followed by explicit clear
-            ast_free(node->data.loop.body);
-
-            // Create COPY_CELL (copy only, no clear) - preserve location from original loop
-            node->type = AST_COPY_CELL;
-            node->data.copy.src_offset = 0;   // src is current position
-            node->data.copy.dst_offset = offset;  // dst is at offset
-
-            // Create SET_CONST(0) for explicit clearing and chain it
-            ast_node_t *clear_node = ast_create_set_const(0, 0);
-            ast_copy_location(clear_node, node); // Copy location from loop to clear
-            node->next = ast_create_sequence(clear_node, node->next);
-
-            // Continue optimizing from current node
-            return ast_optimize(node);
-        }
-    }
-
     // Now optimize children recursively (after copy detection)
     if (node->type == AST_LOOP && node->data.loop.body) {
         node->data.loop.body = ast_optimize(node->data.loop.body);
