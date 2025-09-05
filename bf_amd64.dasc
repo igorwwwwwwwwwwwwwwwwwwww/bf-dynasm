@@ -165,18 +165,10 @@ static void compile_bf_move_ptr(dasm_State **Dst, int count) {
     if (g_unsafe_mode) {
         // Direct pointer manipulation (like BF-JIT)
         if (count > 0) {
-            if (count == 1) {
-                |  inc rbx
-            } else {
-                |  add rbx, count
-            }
+            |  add rbx, count  // Always use ADD like BF-JIT
         } else if (count < 0) {
             int abs_count = -count;
-            if (abs_count == 1) {
-                |  dec rbx
-            } else {
-                |  sub rbx, abs_count
-            }
+            |  sub rbx, abs_count  // Always use SUB like BF-JIT
         }
     } else {
         // Base+offset approach (safe mode)
@@ -201,20 +193,12 @@ static void compile_bf_add_val(dasm_State **Dst, int count, int offset) {
     if (offset == 0) {
         // Normal ADD at current position
         if (g_unsafe_mode) {
-            // Direct pointer access (like BF-JIT)
+            // Direct pointer access (like BF-JIT) - always use ADD/SUB
             if (count > 0) {
-                if (count == 1) {
-                    |  inc byte [rbx]
-                } else {
-                    |  add byte [rbx], count
-                }
+                |  add byte [rbx], count
             } else if (count < 0) {
                 int abs_count = -count;
-                if (abs_count == 1) {
-                    |  dec byte [rbx]
-                } else {
-                    |  sub byte [rbx], abs_count
-                }
+                |  sub byte [rbx], abs_count
             }
         } else {
             // Safe mode: base+offset with masking
@@ -238,20 +222,12 @@ static void compile_bf_add_val(dasm_State **Dst, int count, int offset) {
     } else {
         // ADD at offset
         if (g_unsafe_mode) {
-            // Direct pointer + offset (like BF-JIT)
+            // Direct pointer + offset (like BF-JIT) - always use ADD/SUB
             if (count > 0) {
-                if (count == 1) {
-                    |  inc byte [rbx+offset]
-                } else {
-                    |  add byte [rbx+offset], count
-                }
+                |  add byte [rbx+offset], count
             } else if (count < 0) {
                 int abs_count = -count;
-                if (abs_count == 1) {
-                    |  dec byte [rbx+offset]
-                } else {
-                    |  sub byte [rbx+offset], abs_count
-                }
+                |  sub byte [rbx+offset], abs_count
             }
         } else {
             // Safe mode: base+offset addressing with masking
