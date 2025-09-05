@@ -18,18 +18,21 @@ static int getchar_wrapper(void) {
 
 // AMD64-specific copy cell optimization (copy only, no clearing)
 static void compile_bf_copy_cell(dasm_State **Dst, int src_offset, int dst_offset) {
-    // Load from source cell using base+offset addressing with masking
+    // Load from source cell using base+offset addressing with conditional masking
     |  mov rax, rcx                 // rax = current offset
     |  add rax, src_offset          // rax = current offset + src_offset
-    |  and rax, rdx                 // rax = masked offset
-    |  movzx r8d, byte [rbx+rax]    // Load from base[masked_offset] into R8
+    if (!g_unsafe_mode) {
+        |  and rax, rdx             // rax = masked offset
+    }
+    |  movzx r8d, byte [rbx+rax]    // Load from base[offset] into R8
 
-    // Store to destination cell using base+offset addressing with masking
+    // Store to destination cell using base+offset addressing with conditional masking
     |  mov rax, rcx                 // rax = current offset
     |  add rax, dst_offset          // rax = current offset + dst_offset
-    |  and rax, rdx                 // rax = masked offset
-    |  add byte [rbx+rax], r8b      // Add to base[masked_offset]
-    // Note: Source cell clearing is now handled by explicit SET_CONST(0)
+    if (!g_unsafe_mode) {
+        |  and rax, rdx             // rax = masked offset
+    }
+    |  add byte [rbx+rax], r8b      // Add to base[offset]
 }
 
 // AMD64-specific multiplication optimization
@@ -37,23 +40,29 @@ static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int
     // Skip zero multiplier
     if (multiplier == 0) return;
 
-    // Load source value using base+offset addressing with masking
+    // Load source value using base+offset addressing with conditional masking
     |  mov rax, rcx                 // rax = current offset
     |  add rax, src_offset          // rax = current offset + src_offset
-    |  and rax, rdx                 // rax = masked offset
-    |  movzx r8d, byte [rbx+rax]    // Load from base[masked_offset] into R8
+    if (!g_unsafe_mode) {
+        |  and rax, rdx             // rax = masked offset
+    }
+    |  movzx r8d, byte [rbx+rax]    // Load from base[offset] into R8
 
     if (multiplier == 1) {
         // Optimized case: just add source to target
         |  mov rax, rcx             // rax = current offset
         |  add rax, dst_offset      // rax = current offset + dst_offset
-        |  and rax, rdx             // rax = masked offset
+        if (!g_unsafe_mode) {
+            |  and rax, rdx         // rax = masked offset
+        }
         |  add byte [rbx+rax], r8b  // target += source
     } else if (multiplier == -1) {
         // Optimized case: subtract source from target
         |  mov rax, rcx             // rax = current offset
         |  add rax, dst_offset      // rax = current offset + dst_offset
-        |  and rax, rdx             // rax = masked offset
+        if (!g_unsafe_mode) {
+            |  and rax, rdx         // rax = masked offset
+        }
         |  sub byte [rbx+rax], r8b  // target -= source
     } else {
         // General case: target += source * multiplier
@@ -61,11 +70,11 @@ static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int
         |  imul r8d, r9d            // r8d = source * multiplier
         |  mov rax, rcx             // rax = current offset
         |  add rax, dst_offset      // rax = current offset + dst_offset
-        |  and rax, rdx             // rax = masked offset
+        if (!g_unsafe_mode) {
+            |  and rax, rdx         // rax = masked offset
+        }
         |  add byte [rbx+rax], r8b  // target += product (use low 8 bits)
     }
-
-    // Note: Counter clearing is now handled by explicit SET_CONST(0) after MUL
 }
 
 static void compile_bf_prologue(dasm_State **Dst, size_t memory_size, bool unsafe_mode) {
