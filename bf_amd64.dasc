@@ -18,21 +18,22 @@ static int getchar_wrapper(void) {
 
 // AMD64-specific copy cell optimization (copy only, no clearing)
 static void compile_bf_copy_cell(dasm_State **Dst, int src_offset, int dst_offset) {
-    // Load from source cell using base+offset addressing with conditional masking
-    |  mov rax, rcx                 // rax = current offset
-    |  add rax, src_offset          // rax = current offset + src_offset
-    if (!g_unsafe_mode) {
-        |  and rax, rdx             // rax = masked offset
-    }
-    |  movzx r8d, byte [rbx+rax]    // Load from base[offset] into R8
+    if (g_unsafe_mode) {
+        // Direct pointer approach
+        |  movzx r8d, byte [rbx+src_offset]  // Load from direct pointer + src_offset
+        |  add byte [rbx+dst_offset], r8b    // Add to direct pointer + dst_offset
+    } else {
+        // Safe mode: base+offset addressing with masking
+        |  mov rax, rcx                      // rax = current offset
+        |  add rax, src_offset               // rax = current offset + src_offset
+        |  and rax, rdx                      // rax = masked offset
+        |  movzx r8d, byte [rbx+rax]         // Load from base[offset] into R8
 
-    // Store to destination cell using base+offset addressing with conditional masking
-    |  mov rax, rcx                 // rax = current offset
-    |  add rax, dst_offset          // rax = current offset + dst_offset
-    if (!g_unsafe_mode) {
-        |  and rax, rdx             // rax = masked offset
+        |  mov rax, rcx                      // rax = current offset
+        |  add rax, dst_offset               // rax = current offset + dst_offset
+        |  and rax, rdx                      // rax = masked offset
+        |  add byte [rbx+rax], r8b           // Add to base[offset]
     }
-    |  add byte [rbx+rax], r8b      // Add to base[offset]
 }
 
 // AMD64-specific multiplication optimization
@@ -40,40 +41,44 @@ static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int
     // Skip zero multiplier
     if (multiplier == 0) return;
 
-    // Load source value using base+offset addressing with conditional masking
-    |  mov rax, rcx                 // rax = current offset
-    |  add rax, src_offset          // rax = current offset + src_offset
-    if (!g_unsafe_mode) {
-        |  and rax, rdx             // rax = masked offset
-    }
-    |  movzx r8d, byte [rbx+rax]    // Load from base[offset] into R8
-
-    if (multiplier == 1) {
-        // Optimized case: just add source to target
-        |  mov rax, rcx             // rax = current offset
-        |  add rax, dst_offset      // rax = current offset + dst_offset
-        if (!g_unsafe_mode) {
-            |  and rax, rdx         // rax = masked offset
+    if (g_unsafe_mode) {
+        // Direct pointer approach
+        |  movzx r8d, byte [rbx+src_offset]  // Load from direct pointer + src_offset
+        
+        if (multiplier == 1) {
+            |  add byte [rbx+dst_offset], r8b   // target += source
+        } else if (multiplier == -1) {
+            |  sub byte [rbx+dst_offset], r8b   // target -= source  
+        } else {
+            |  mov r9d, multiplier               // r9d = multiplier
+            |  imul r8d, r9d                     // r8d = source * multiplier
+            |  add byte [rbx+dst_offset], r8b    // target += product (use low 8 bits)
         }
-        |  add byte [rbx+rax], r8b  // target += source
-    } else if (multiplier == -1) {
-        // Optimized case: subtract source from target
-        |  mov rax, rcx             // rax = current offset
-        |  add rax, dst_offset      // rax = current offset + dst_offset
-        if (!g_unsafe_mode) {
-            |  and rax, rdx         // rax = masked offset
-        }
-        |  sub byte [rbx+rax], r8b  // target -= source
     } else {
-        // General case: target += source * multiplier
-        |  mov r9d, multiplier      // r9d = multiplier
-        |  imul r8d, r9d            // r8d = source * multiplier
-        |  mov rax, rcx             // rax = current offset
-        |  add rax, dst_offset      // rax = current offset + dst_offset
-        if (!g_unsafe_mode) {
-            |  and rax, rdx         // rax = masked offset
+        // Safe mode: base+offset addressing with masking
+        |  mov rax, rcx                      // rax = current offset
+        |  add rax, src_offset               // rax = current offset + src_offset
+        |  and rax, rdx                      // rax = masked offset
+        |  movzx r8d, byte [rbx+rax]         // Load from base[offset] into R8
+
+        if (multiplier == 1) {
+            |  mov rax, rcx                  // rax = current offset
+            |  add rax, dst_offset           // rax = current offset + dst_offset
+            |  and rax, rdx                  // rax = masked offset
+            |  add byte [rbx+rax], r8b       // target += source
+        } else if (multiplier == -1) {
+            |  mov rax, rcx                  // rax = current offset
+            |  add rax, dst_offset           // rax = current offset + dst_offset
+            |  and rax, rdx                  // rax = masked offset
+            |  sub byte [rbx+rax], r8b       // target -= source
+        } else {
+            |  mov r9d, multiplier           // r9d = multiplier
+            |  imul r8d, r9d                 // r8d = source * multiplier
+            |  mov rax, rcx                  // rax = current offset
+            |  add rax, dst_offset           // rax = current offset + dst_offset
+            |  and rax, rdx                  // rax = masked offset
+            |  add byte [rbx+rax], r8b       // target += product (use low 8 bits)
         }
-        |  add byte [rbx+rax], r8b  // target += product (use low 8 bits)
     }
 }
 
@@ -81,19 +86,23 @@ static void compile_bf_prologue(dasm_State **Dst, size_t memory_size) {
     |  push rbp
     |  mov rbp, rsp
     |  push rbx         // Save RBX (base address register)
-    |  push rcx         // Save RCX (offset register)
     if (!g_unsafe_mode) {
+        |  push rcx     // Save RCX (offset register) only if needed
         |  push rdx     // Save RDX (mask register) only if needed
     }
     |  push r8          // Save R8 (temporary register)
     |  push r9          // Save R9 (temporary register)
     if (g_unsafe_mode) {
-        |  sub rsp, 16  // Align stack (one less register saved)
+        |  sub rsp, 24  // Align stack (two less registers saved)
     } else {
         |  sub rsp, 8   // Align stack for function calls (16-byte alignment)
     }
-    |  mov rbx, rdi     // RBX = memory base address (passed parameter)
-    |  xor rcx, rcx     // RCX = current offset (start at 0)
+    if (g_unsafe_mode) {
+        |  mov rbx, rdi // RBX = direct memory pointer (start at base address)
+    } else {
+        |  mov rbx, rdi // RBX = memory base address (passed parameter)
+        |  xor rcx, rcx // RCX = current offset (start at 0)
+    }
 
     if (!g_unsafe_mode) {
         // Compute address mask (memory_size - 1) and store in RDX
@@ -105,7 +114,7 @@ static void compile_bf_prologue(dasm_State **Dst, size_t memory_size) {
 static void compile_bf_epilogue(dasm_State **Dst) {
     |  xor eax, eax
     if (g_unsafe_mode) {
-        |  add rsp, 16  // Remove alignment padding (one less register saved)
+        |  add rsp, 24  // Remove alignment padding (two less registers saved)
     } else {
         |  add rsp, 8   // Remove alignment padding
     }
@@ -113,31 +122,31 @@ static void compile_bf_epilogue(dasm_State **Dst) {
     |  pop r8           // Restore R8 (temporary register)
     if (!g_unsafe_mode) {
         |  pop rdx      // Restore RDX (mask register) only if needed
+        |  pop rcx      // Restore RCX (offset register) only if needed
     }
-    |  pop rcx          // Restore RCX (offset register)
     |  pop rbx          // Restore RBX (base address register)
     |  pop rbp
     |  ret
 }
 
 static void compile_bf_loop_start(dasm_State **Dst, int loop_end) {
-    if (!g_unsafe_mode) {
+    if (g_unsafe_mode) {
+        |  cmp byte [rbx], 0      // Direct comparison at current cell
+    } else {
         |  mov rax, rcx           // rax = current offset
         |  and rax, rdx           // rax = masked offset
         |  cmp byte [rbx+rax], 0  // Compare value at base[masked_offset]
-    } else {
-        |  cmp byte [rbx+rcx], 0  // Direct comparison using current offset
     }
     |  je =>(loop_end)
 }
 
 static void compile_bf_loop_end(dasm_State **Dst, int back_to_start) {
-    if (!g_unsafe_mode) {
+    if (g_unsafe_mode) {
+        |  cmp byte [rbx], 0      // Direct comparison at current cell
+    } else {
         |  mov rax, rcx           // rax = current offset
         |  and rax, rdx           // rax = masked offset
         |  cmp byte [rbx+rax], 0  // Compare value at base[masked_offset]
-    } else {
-        |  cmp byte [rbx+rcx], 0  // Direct comparison using current offset
     }
     |  jne =>(back_to_start)
 }
@@ -153,18 +162,37 @@ static void compile_bf_debug_label(dasm_State **Dst, int debug_label) {
 
 // AST-based compilation wrapper functions
 static void compile_bf_move_ptr(dasm_State **Dst, int count) {
-    if (count > 0) {
-        if (count == 1) {
-            |  add rcx, 1
-        } else {
-            |  add rcx, count
+    if (g_unsafe_mode) {
+        // Direct pointer manipulation (like BF-JIT)
+        if (count > 0) {
+            if (count == 1) {
+                |  inc rbx
+            } else {
+                |  add rbx, count
+            }
+        } else if (count < 0) {
+            int abs_count = -count;
+            if (abs_count == 1) {
+                |  dec rbx
+            } else {
+                |  sub rbx, abs_count
+            }
         }
-    } else if (count < 0) {
-        int abs_count = -count;
-        if (abs_count == 1) {
-            |  sub rcx, 1
-        } else {
-            |  sub rcx, abs_count
+    } else {
+        // Base+offset approach (safe mode)
+        if (count > 0) {
+            if (count == 1) {
+                |  add rcx, 1
+            } else {
+                |  add rcx, count
+            }
+        } else if (count < 0) {
+            int abs_count = -count;
+            if (abs_count == 1) {
+                |  sub rcx, 1
+            } else {
+                |  sub rcx, abs_count
+            }
         }
     }
 }
@@ -172,7 +200,24 @@ static void compile_bf_move_ptr(dasm_State **Dst, int count) {
 static void compile_bf_add_val(dasm_State **Dst, int count, int offset) {
     if (offset == 0) {
         // Normal ADD at current position
-        if (!g_unsafe_mode) {
+        if (g_unsafe_mode) {
+            // Direct pointer access (like BF-JIT)
+            if (count > 0) {
+                if (count == 1) {
+                    |  inc byte [rbx]
+                } else {
+                    |  add byte [rbx], count
+                }
+            } else if (count < 0) {
+                int abs_count = -count;
+                if (abs_count == 1) {
+                    |  dec byte [rbx]
+                } else {
+                    |  sub byte [rbx], abs_count
+                }
+            }
+        } else {
+            // Safe mode: base+offset with masking
             |  mov rax, rcx              // rax = current offset
             |  and rax, rdx              // rax = masked offset
             if (count > 0) {
@@ -189,121 +234,130 @@ static void compile_bf_add_val(dasm_State **Dst, int count, int offset) {
                     |  sub byte [rbx+rax], abs_count
                 }
             }
-        } else {
-            // Unsafe mode: direct access using rcx
+        }
+    } else {
+        // ADD at offset
+        if (g_unsafe_mode) {
+            // Direct pointer + offset (like BF-JIT)
             if (count > 0) {
                 if (count == 1) {
-                    |  inc byte [rbx+rcx]
+                    |  inc byte [rbx+offset]
                 } else {
-                    |  add byte [rbx+rcx], count
+                    |  add byte [rbx+offset], count
                 }
             } else if (count < 0) {
                 int abs_count = -count;
                 if (abs_count == 1) {
-                    |  dec byte [rbx+rcx]
+                    |  dec byte [rbx+offset]
                 } else {
-                    |  sub byte [rbx+rcx], abs_count
+                    |  sub byte [rbx+offset], abs_count
                 }
             }
-        }
-    } else {
-        // ADD at offset using base+offset addressing with conditional masking
-        |  mov rax, rcx              // rax = current offset
-        |  add rax, offset           // rax = current offset + additional offset
-        if (!g_unsafe_mode) {
-            |  and rax, rdx          // rax = masked offset
-        }
-        if (count > 0) {
-            if (count == 1) {
-                |  inc byte [rbx+rax]
-            } else {
-                |  add byte [rbx+rax], count
-            }
-        } else if (count < 0) {
-            int abs_count = -count;
-            if (abs_count == 1) {
-                |  dec byte [rbx+rax]
-            } else {
-                |  sub byte [rbx+rax], abs_count
+        } else {
+            // Safe mode: base+offset addressing with masking
+            |  mov rax, rcx              // rax = current offset
+            |  add rax, offset           // rax = current offset + additional offset
+            |  and rax, rdx              // rax = masked offset
+            if (count > 0) {
+                if (count == 1) {
+                    |  inc byte [rbx+rax]
+                } else {
+                    |  add byte [rbx+rax], count
+                }
+            } else if (count < 0) {
+                int abs_count = -count;
+                if (abs_count == 1) {
+                    |  dec byte [rbx+rax]
+                } else {
+                    |  sub byte [rbx+rax], abs_count
+                }
             }
         }
     }
 }
 
 static void compile_bf_input(dasm_State **Dst, int offset) {
-    |  push rcx                              // Save RCX (offset register) before function call
     if (!g_unsafe_mode) {
-        |  push rdx                          // Save RDX (mask register) only if needed
+        |  push rcx                          // Save RCX (offset register) before function call  
+        |  push rdx                          // Save RDX (mask register) before function call
     }
     |  mov64 rax, (uintptr_t)getchar_wrapper   // Load function pointer
     |  call rax                               // Call through register
     if (!g_unsafe_mode) {
-        |  pop rdx                           // Restore RDX (mask register) only if needed
+        |  pop rdx                           // Restore RDX (mask register) after function call
+        |  pop rcx                           // Restore RCX (offset register) after function call
     }
-    |  pop rcx                               // Restore RCX (offset register) after function call
+    
     if (offset == 0) {
-        if (!g_unsafe_mode) {
-            |  mov rsi, rcx                       // rsi = current offset
-            |  and rsi, rdx                       // rsi = masked offset
-            |  mov [rbx+rsi], al                  // Store result at base[masked_offset]
+        if (g_unsafe_mode) {
+            |  mov [rbx], al                 // Direct store to current cell
         } else {
-            |  mov [rbx+rcx], al                  // Direct store using current offset
+            |  mov rsi, rcx                  // rsi = current offset
+            |  and rsi, rdx                  // rsi = masked offset
+            |  mov [rbx+rsi], al             // Store result at base[masked_offset]
         }
     } else {
-        |  mov rsi, rcx                       // rsi = current offset
-        |  add rsi, offset                    // rsi = current offset + additional offset
-        if (!g_unsafe_mode) {
-            |  and rsi, rdx                   // rsi = masked offset
+        if (g_unsafe_mode) {
+            |  mov [rbx+offset], al          // Direct store to offset cell
+        } else {
+            |  mov rsi, rcx                  // rsi = current offset
+            |  add rsi, offset               // rsi = current offset + additional offset
+            |  and rsi, rdx                  // rsi = masked offset
+            |  mov [rbx+rsi], al             // Store result at base[offset]
         }
-        |  mov [rbx+rsi], al                  // Store result at base[offset]
     }
 }
 
 static void compile_bf_output(dasm_State **Dst, int offset) {
     if (offset == 0) {
-        if (!g_unsafe_mode) {
-            |  mov rax, rcx                       // rax = current offset
-            |  and rax, rdx                       // rax = masked offset
-            |  movzx edi, byte [rbx+rax]          // Load byte from base[masked_offset] and put in first argument register
+        if (g_unsafe_mode) {
+            |  movzx edi, byte [rbx]             // Direct load from current cell
         } else {
-            |  movzx edi, byte [rbx+rcx]          // Direct load using current offset
+            |  mov rax, rcx                      // rax = current offset
+            |  and rax, rdx                      // rax = masked offset
+            |  movzx edi, byte [rbx+rax]         // Load byte from base[masked_offset]
         }
     } else {
-        |  mov rax, rcx                       // rax = current offset
-        |  add rax, offset                    // rax = current offset + additional offset
-        if (!g_unsafe_mode) {
-            |  and rax, rdx                   // rax = masked offset
+        if (g_unsafe_mode) {
+            |  movzx edi, byte [rbx+offset]     // Direct load from offset cell
+        } else {
+            |  mov rax, rcx                      // rax = current offset
+            |  add rax, offset                   // rax = current offset + additional offset
+            |  and rax, rdx                      // rax = masked offset
+            |  movzx edi, byte [rbx+rax]         // Load byte from base[offset]
         }
-        |  movzx edi, byte [rbx+rax]          // Load byte from base[offset] and put in first argument register
     }
-    |  push rcx                              // Save RCX (offset register) before function call
+    
     if (!g_unsafe_mode) {
-        |  push rdx                          // Save RDX (mask register) only if needed
+        |  push rcx                              // Save RCX (offset register) before function call
+        |  push rdx                              // Save RDX (mask register) before function call
     }
-    |  mov64 rax, (uintptr_t)putchar_wrapper  // Load function pointer into rax
-    |  call rax                               // Call through register
+    |  mov64 rax, (uintptr_t)putchar_wrapper     // Load function pointer into rax
+    |  call rax                                  // Call through register
     if (!g_unsafe_mode) {
-        |  pop rdx                           // Restore RDX (mask register) only if needed
+        |  pop rdx                               // Restore RDX (mask register) after function call
+        |  pop rcx                               // Restore RCX (offset register) after function call
     }
-    |  pop rcx                               // Restore RCX (offset register) after function call
 }
 
 // AMD64-specific set constant optimization
 static void compile_bf_set_const(dasm_State **Dst, int value, int offset) {
     if (offset == 0) {
-        if (!g_unsafe_mode) {
-            |  mov rax, rcx              // rax = current offset
-            |  and rax, rdx              // rax = masked offset
-            |  mov byte [rbx+rax], (value & 0xFF)
+        if (g_unsafe_mode) {
+            |  mov byte [rbx], (value & 0xFF)        // Direct store to current cell
         } else {
-            |  mov byte [rbx+rcx], (value & 0xFF)
+            |  mov rax, rcx                          // rax = current offset
+            |  and rax, rdx                          // rax = masked offset
+            |  mov byte [rbx+rax], (value & 0xFF)    // Store to masked offset
         }
     } else {
-        |  mov rax, rcx              // rax = current offset
-        |  add rax, offset           // rax = current offset + additional offset
-        if (!g_unsafe_mode) {
-            |  and rax, rdx          // rax = masked offset
+        if (g_unsafe_mode) {
+            |  mov byte [rbx+offset], (value & 0xFF) // Direct store to offset cell
+        } else {
+            |  mov rax, rcx                          // rax = current offset
+            |  add rax, offset                       // rax = current offset + additional offset
+            |  and rax, rdx                          // rax = masked offset
+            |  mov byte [rbx+rax], (value & 0xFF)    // Store to computed offset
         }
-        |  mov byte [rbx+rax], (value & 0xFF)
     }
 }
