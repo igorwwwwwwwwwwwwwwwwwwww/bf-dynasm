@@ -56,12 +56,6 @@ ast_node_t* ast_create_sequence(ast_node_t *first, ast_node_t *second) {
 }
 
 
-ast_node_t* ast_create_copy_cell(int src_offset, int dst_offset) {
-    ast_node_t *node = ast_create_node(AST_COPY_CELL);
-    node->data.copy.src_offset = src_offset;
-    node->data.copy.dst_offset = dst_offset;
-    return node;
-}
 
 ast_node_t* ast_create_set_const(int value, int offset) {
     ast_node_t *node = ast_create_node(AST_SET_CONST);
@@ -95,7 +89,6 @@ static const char* ast_type_name(ast_node_type_t type) {
         case AST_OUTPUT: return "OUTPUT";
         case AST_INPUT: return "INPUT";
         case AST_LOOP: return "LOOP";
-        case AST_COPY_CELL: return "COPY_CELL";
         case AST_SET_CONST: return "SET_CONST";
         case AST_MUL: return "MUL";
         default: return "UNKNOWN";
@@ -118,11 +111,6 @@ void ast_print(ast_node_t *node, int indent) {
             } else {
                 fprintf(stderr, " (count: %d)", node->data.basic.count);
             }
-            break;
-        case AST_COPY_CELL:
-            fprintf(stderr, " (src: %d, dst: %d)",
-                   node->data.copy.src_offset,
-                   node->data.copy.dst_offset);
             break;
         case AST_SET_CONST:
             if (node->data.basic.offset != 0) {
@@ -243,13 +231,8 @@ ast_node_t* ast_optimize(ast_node_t *node) {
             if (op->type == AST_ADD_VAL && op->data.basic.offset != 0) {
                 ast_node_t *new_node;
 
-                if (op->data.basic.count == 1) {
-                    // Use COPY_CELL for multiplier = 1 (copy from source to destination)
-                    new_node = ast_create_copy_cell(0, op->data.basic.offset);
-                } else {
-                    // Use MUL for other multipliers
-                    new_node = ast_create_mul(op->data.basic.count, 0, op->data.basic.offset);
-                }
+                // Create MUL node directly (multiplier = 1 is handled in codegen)
+                new_node = ast_create_mul(op->data.basic.count, 0, op->data.basic.offset);
 
                 // Preserve location from original loop
                 ast_copy_location(new_node, node);
@@ -376,10 +359,7 @@ ast_node_t* ast_rewrite_sequences(ast_node_t *node) {
                     // Update SET_CONST to use current offset
                     rewrite_current->data.basic.offset += current_offset;
 
-                } else if (rewrite_current->type == AST_COPY_CELL) {
-                    // Update COPY_CELL offsets
-                    rewrite_current->data.copy.src_offset += current_offset;
-                    rewrite_current->data.copy.dst_offset += current_offset;
+                    // Note: AST_COPY_CELL is now eliminated - converted to AST_MUL in ast_create_copy_cell
                 }
 
                 rewrite_current = rewrite_current->next;

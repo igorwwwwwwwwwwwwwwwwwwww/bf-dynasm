@@ -166,9 +166,6 @@ static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label
             break;
         }
 
-        case AST_COPY_CELL:
-            compile_bf_copy_cell(Dst, node->data.copy.src_offset, node->data.copy.dst_offset);
-            break;
 
         case AST_SET_CONST:
             compile_bf_set_const(Dst, node->data.basic.count, node->data.basic.offset);

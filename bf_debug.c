@@ -34,8 +34,6 @@ int bf_debug_get_node_data(ast_node_t *node) {
         case AST_OUTPUT:
         case AST_INPUT:
             return node->data.basic.offset;
-        case AST_COPY_CELL:
-            return (node->data.copy.src_offset << 16) | (node->data.copy.dst_offset & 0xFFFF);
         case AST_MUL:
             return node->data.mul.multiplier;
         case AST_LOOP:
@@ -99,7 +97,6 @@ const char* debug_node_type_name(ast_node_type_t type) {
         case AST_OUTPUT: return "OUTPUT";
         case AST_INPUT: return "INPUT";
         case AST_LOOP: return "LOOP";
-        case AST_COPY_CELL: return "COPY_CELL";
         case AST_SET_CONST: return "SET_CONST";
         case AST_MUL: return "MUL";
         default: return "UNKNOWN";
@@ -123,10 +120,6 @@ void bf_debug_dump_mappings(bf_debug_info_t *debug, FILE *out) {
             case AST_SET_CONST:
             case AST_MUL:
                 fprintf(out, " [%d]", entry->node_data);
-                break;
-            case AST_COPY_CELL:
-                fprintf(out, " [src:%d dst:%d]",
-                       entry->node_data >> 16, entry->node_data & 0xFFFF);
                 break;
             default:
                 break;

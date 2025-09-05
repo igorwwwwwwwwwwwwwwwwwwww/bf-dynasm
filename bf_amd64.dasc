@@ -16,25 +16,6 @@ static int getchar_wrapper(void) {
     return c;
 }
 
-// AMD64-specific copy cell optimization (copy only, no clearing)
-static void compile_bf_copy_cell(dasm_State **Dst, int src_offset, int dst_offset) {
-    if (g_unsafe_mode) {
-        // Direct pointer approach
-        |  movzx r8d, byte [rbx+src_offset]  // Load from direct pointer + src_offset
-        |  add byte [rbx+dst_offset], r8b    // Add to direct pointer + dst_offset
-    } else {
-        // Safe mode: base+offset addressing with masking
-        |  mov rax, rcx                      // rax = current offset
-        |  add rax, src_offset               // rax = current offset + src_offset
-        |  and rax, rdx                      // rax = masked offset
-        |  movzx r8d, byte [rbx+rax]         // Load from base[offset] into R8
-
-        |  mov rax, rcx                      // rax = current offset
-        |  add rax, dst_offset               // rax = current offset + dst_offset
-        |  and rax, rdx                      // rax = masked offset
-        |  add byte [rbx+rax], r8b           // Add to base[offset]
-    }
-}
 
 // AMD64-specific multiplication optimization
 static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int dst_offset) {

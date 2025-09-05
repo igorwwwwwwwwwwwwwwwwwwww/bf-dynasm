@@ -12,7 +12,6 @@ typedef enum {
     AST_LOOP,           // [...]
 
     // Optimized high-level operations
-    AST_COPY_CELL,      // Optimized [-<+>] (copy current to left)
     AST_SET_CONST,      // Direct constant assignment (includes clear cell as SET_CONST(0))
     AST_MUL,            // Multiply current cell by multiplier and add to target offset
 } ast_node_type_t;
@@ -24,10 +23,6 @@ typedef struct ast_node {
             int count;            // For MOVE_PTR, ADD_VAL value, SET_CONST value
             int offset;           // For ADD_VAL, INPUT, OUTPUT, SET_CONST (default 0 for current position)
         } basic;
-        struct {
-            int src_offset;
-            int dst_offset;
-        } copy;
         struct {
             struct ast_node *body;  // For AST_LOOP only
         } loop;
@@ -51,7 +46,6 @@ ast_node_t* ast_create_loop(ast_node_t *body);
 ast_node_t* ast_create_sequence(ast_node_t *first, ast_node_t *second);
 
 // Optimized AST nodes
-ast_node_t* ast_create_copy_cell(int src_offset, int dst_offset);
 ast_node_t* ast_create_set_const(int value, int offset);
 ast_node_t* ast_create_mul(int multiplier, int src_offset, int dst_offset);
 

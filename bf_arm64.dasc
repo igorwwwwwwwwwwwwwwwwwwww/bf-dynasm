@@ -16,72 +16,6 @@ static int getchar_wrapper(void) {
     return c;
 }
 
-// ARM64-specific copy cell optimization (copy only, no clearing)
-static void compile_bf_copy_cell(dasm_State **Dst, int src_offset, int dst_offset) {
-    if (!g_unsafe_mode) {
-        // Safe mode: use masking
-        if (src_offset == 0) {
-            |  and x16, x20, x21
-            |  ldrb w0, [x19, x16]
-        } else {
-            |  mov x16, #src_offset
-            |  add x16, x20, x16
-            |  and x16, x16, x21
-            |  ldrb w0, [x19, x16]
-        }
-
-        if (dst_offset == 0) {
-            |  and x17, x20, x21
-            |  ldrb w1, [x19, x17]
-            |  add w0, w0, w1
-            |  strb w0, [x19, x17]
-        } else {
-            |  mov x17, #dst_offset
-            |  add x17, x20, x17
-            |  and x17, x17, x21
-            |  ldrb w1, [x19, x17]
-            |  add w0, w0, w1
-            |  strb w0, [x19, x17]
-        }
-    } else {
-        // Unsafe mode: direct access like pre-masking version
-        if (src_offset == 0) {
-            |  ldrb w0, [x19, x20]
-        } else if (src_offset > 0 && src_offset <= 4095) {
-            |  add x16, x20, #src_offset
-            |  ldrb w0, [x19, x16]
-        } else if (src_offset < 0 && (-src_offset) <= 4095) {
-            |  sub x16, x20, #(-src_offset)
-            |  ldrb w0, [x19, x16]
-        } else {
-            |  mov x16, #src_offset
-            |  add x16, x20, x16
-            |  ldrb w0, [x19, x16]
-        }
-
-        if (dst_offset == 0) {
-            |  ldrb w1, [x19, x20]
-            |  add w0, w0, w1
-            |  strb w0, [x19, x20]
-        } else if (dst_offset > 0 && dst_offset <= 4095) {
-            |  add x17, x20, #dst_offset
-            |  ldrb w1, [x19, x17]
-            |  add w0, w0, w1
-            |  strb w0, [x19, x17]
-        } else if (dst_offset < 0 && (-dst_offset) <= 4095) {
-            |  sub x17, x20, #(-dst_offset)
-            |  ldrb w1, [x19, x17]
-            |  add w0, w0, w1
-            |  strb w0, [x19, x17]
-        } else {
-            |  mov x17, #dst_offset
-            |  add x17, x20, x17
-            |  ldrb w1, [x19, x17]
-            |  add w0, w0, w1
-            |  strb w0, [x19, x17]
-        }
-    }
-}
 
 // ARM64-specific multiplication optimization
 static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int dst_offset) {
@@ -125,9 +59,16 @@ static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int
             |  and x17, x17, x21
             |  ldrb w1, [x19, x17]
         }
-        |  mov w2, #multiplier
-        |  mul w3, w0, w2
-        |  add w1, w1, w3
+        
+        if (multiplier == 1) {
+            |  add w1, w1, w0
+        } else if (multiplier == -1) {
+            |  sub w1, w1, w0
+        } else {
+            |  mov w2, #multiplier
+            |  mul w3, w0, w2
+            |  add w1, w1, w3
+        }
         |  strb w1, [x19, x17]
     } else {
         // Unsafe mode: direct access like pre-masking version
@@ -158,9 +99,16 @@ static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int
             |  add x17, x20, x17
             |  ldrb w1, [x19, x17]
         }
-        |  mov w2, #multiplier
-        |  mul w3, w0, w2
-        |  add w1, w1, w3
+        
+        if (multiplier == 1) {
+            |  add w1, w1, w0
+        } else if (multiplier == -1) {
+            |  sub w1, w1, w0
+        } else {
+            |  mov w2, #multiplier
+            |  mul w3, w0, w2
+            |  add w1, w1, w3
+        }
         if (dst_offset == 0) {
             |  strb w1, [x19, x20]
         } else {
