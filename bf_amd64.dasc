@@ -77,7 +77,7 @@ static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int
     }
 }
 
-static void compile_bf_prologue(dasm_State **Dst, size_t memory_size, bool unsafe_mode) {
+static void compile_bf_prologue(dasm_State **Dst, size_t memory_size) {
     |  push rbp
     |  mov rbp, rsp
     |  push rbx         // Save RBX (base address register)
@@ -102,7 +102,7 @@ static void compile_bf_prologue(dasm_State **Dst, size_t memory_size, bool unsaf
     }
 }
 
-static void compile_bf_epilogue(dasm_State **Dst, bool unsafe_mode) {
+static void compile_bf_epilogue(dasm_State **Dst) {
     |  xor eax, eax
     |  add rsp, 8       // Remove alignment padding
     |  pop r9           // Restore R9 (temporary register)

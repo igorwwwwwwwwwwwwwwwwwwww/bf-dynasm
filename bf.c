@@ -198,12 +198,12 @@ static bf_func compile_bf_ast(ast_node_t *ast, bool debug_mode, bool unsafe_mode
     int debug_label_count = debug_info ? ast_count_nodes(ast) : 0;
     dasm_growpc(Dst, MAX_NESTING * 2 + debug_label_count);
 
-    compile_bf_prologue(Dst, memory_size, unsafe_mode);
+    compile_bf_prologue(Dst, memory_size);
 
     int debug_label_counter = MAX_NESTING * 2; // Start debug labels after loop labels
     ast_compile_direct(ast, Dst, 0, debug_info, debug_info ? &debug_label_counter : NULL);
 
-    compile_bf_epilogue(Dst, unsafe_mode);
+    compile_bf_epilogue(Dst);
 
     size_t size;
     int ret = dasm_link(Dst, &size);

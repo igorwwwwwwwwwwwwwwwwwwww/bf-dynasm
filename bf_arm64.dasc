@@ -169,7 +169,7 @@ static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int
     }
 }
 
-static void compile_bf_prologue(dasm_State **Dst, size_t memory_size, bool unsafe_mode) {
+static void compile_bf_prologue(dasm_State **Dst, size_t memory_size) {
     |  stp x29, x30, [sp, #-64]!
     |  mov x29, sp
     |  str x19, [sp, #16]
@@ -193,7 +193,7 @@ static void compile_bf_prologue(dasm_State **Dst, size_t memory_size, bool unsaf
     }
 }
 
-static void compile_bf_epilogue(dasm_State **Dst, bool unsafe_mode) {
+static void compile_bf_epilogue(dasm_State **Dst) {
     |  mov w0, #0
     |  ldr x21, [sp, #32]
     |  ldr x20, [sp, #24]
