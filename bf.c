@@ -18,6 +18,9 @@
 #define BF_DEFAULT_MEMORY_SIZE 65536  // 64KB - nice power of 2
 #define MAX_NESTING 1000
 
+// Global flag to control unsafe mode (accessible by DynASM templates)
+static bool g_unsafe_mode = false;
+
 // High-resolution timing helpers
 static double get_time_ms(void) {
     struct timespec ts;
@@ -184,7 +187,9 @@ static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label
     return next_label;
 }
 
-static bf_func compile_bf_ast(ast_node_t *ast, bool debug_mode, void **code_ptr, size_t *code_size, bf_debug_info_t *debug_info, size_t memory_size) {
+static bf_func compile_bf_ast(ast_node_t *ast, bool debug_mode, bool unsafe_mode, void **code_ptr, size_t *code_size, bf_debug_info_t *debug_info, size_t memory_size) {
+    g_unsafe_mode = unsafe_mode;  // Set global flag for DynASM templates
+    
     dasm_State *state = NULL;
     dasm_State **Dst = &state;
     dasm_init(Dst, 1);
@@ -193,12 +198,12 @@ static bf_func compile_bf_ast(ast_node_t *ast, bool debug_mode, void **code_ptr,
     int debug_label_count = debug_info ? ast_count_nodes(ast) : 0;
     dasm_growpc(Dst, MAX_NESTING * 2 + debug_label_count);
 
-    compile_bf_prologue(Dst, memory_size);
+    compile_bf_prologue(Dst, memory_size, unsafe_mode);
 
     int debug_label_counter = MAX_NESTING * 2; // Start debug labels after loop labels
     ast_compile_direct(ast, Dst, 0, debug_info, debug_info ? &debug_label_counter : NULL);
 
-    compile_bf_epilogue(Dst);
+    compile_bf_epilogue(Dst, unsafe_mode);
 
     size_t size;
     int ret = dasm_link(Dst, &size);
@@ -249,6 +254,7 @@ int main(int argc, char *argv[]) {
     bool show_help = false;
     bool profile_mode = false;
     bool timing_mode = false;
+    bool unsafe_mode = false;  // Disable memory safety for performance
     const char *profile_output = NULL;
     size_t memory_size = BF_DEFAULT_MEMORY_SIZE;
     size_t memory_offset = 4096;  // Default 4KB offset for negative access
@@ -263,6 +269,9 @@ int main(int argc, char *argv[]) {
             arg_offset++;
         } else if (strcmp(argv[i], "--no-optimize") == 0) {
             optimize = false;
+            arg_offset++;
+        } else if (strcmp(argv[i], "--unsafe") == 0) {
+            unsafe_mode = true;
             arg_offset++;
         } else if (strcmp(argv[i], "--profile") == 0) {
             if (i + 1 >= argc) {
@@ -317,6 +326,7 @@ int main(int argc, char *argv[]) {
         fprintf(stream, "  --debug           Enable debug mode (dump AST and compiled code)\n");
         fprintf(stream, "  --timing          Show execution phase timing\n");
         fprintf(stream, "  --no-optimize     Disable AST optimizations\n");
+        fprintf(stream, "  --unsafe          Disable memory safety checks for performance\n");
         fprintf(stream, "  --profile file    Enable profiling (folded stack format)\n");
         fprintf(stream, "  --memory size     Set memory size in bytes (default: %zu)\n", (size_t)BF_DEFAULT_MEMORY_SIZE);
         fprintf(stream, "  --memory-offset n Set initial pointer offset in bytes (default: 4096)\n");
@@ -390,7 +400,7 @@ int main(int argc, char *argv[]) {
     size_t code_size = 0;
     // Adjust memory size for JIT compilation to account for offset
     size_t effective_memory_size = memory_size - memory_offset;
-    compiled_program = compile_bf_ast(ast, debug_mode, &code_ptr, &code_size, debug_ptr, effective_memory_size);
+    compiled_program = compile_bf_ast(ast, debug_mode, unsafe_mode, &code_ptr, &code_size, debug_ptr, effective_memory_size);
 
     if (timing_mode) {
         double phase_end = get_time_ms();

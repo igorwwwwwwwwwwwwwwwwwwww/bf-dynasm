@@ -2,6 +2,9 @@
 |.actionlist actions
 |.section code
 
+// Access to global unsafe mode flag
+extern bool g_unsafe_mode;
+
 // ARM64-specific wrapper functions
 static int putchar_wrapper(int c) {
     return putchar(c);
@@ -15,28 +18,68 @@ static int getchar_wrapper(void) {
 
 // ARM64-specific copy cell optimization (copy only, no clearing)
 static void compile_bf_copy_cell(dasm_State **Dst, int src_offset, int dst_offset) {
-    if (src_offset == 0) {
-        |  and x16, x20, x21
-        |  ldrb w0, [x19, x16]
-    } else {
-        |  mov x16, #src_offset
-        |  add x16, x20, x16
-        |  and x16, x16, x21
-        |  ldrb w0, [x19, x16]
-    }
+    if (!g_unsafe_mode) {
+        // Safe mode: use masking
+        if (src_offset == 0) {
+            |  and x16, x20, x21
+            |  ldrb w0, [x19, x16]
+        } else {
+            |  mov x16, #src_offset
+            |  add x16, x20, x16
+            |  and x16, x16, x21
+            |  ldrb w0, [x19, x16]
+        }
 
-    if (dst_offset == 0) {
-        |  and x17, x20, x21
-        |  ldrb w1, [x19, x17]
-        |  add w0, w0, w1
-        |  strb w0, [x19, x17]
+        if (dst_offset == 0) {
+            |  and x17, x20, x21
+            |  ldrb w1, [x19, x17]
+            |  add w0, w0, w1
+            |  strb w0, [x19, x17]
+        } else {
+            |  mov x17, #dst_offset
+            |  add x17, x20, x17
+            |  and x17, x17, x21
+            |  ldrb w1, [x19, x17]
+            |  add w0, w0, w1
+            |  strb w0, [x19, x17]
+        }
     } else {
-        |  mov x17, #dst_offset
-        |  add x17, x20, x17
-        |  and x17, x17, x21
-        |  ldrb w1, [x19, x17]
-        |  add w0, w0, w1
-        |  strb w0, [x19, x17]
+        // Unsafe mode: direct access like pre-masking version
+        if (src_offset == 0) {
+            |  ldrb w0, [x19, x20]
+        } else if (src_offset > 0 && src_offset <= 4095) {
+            |  add x16, x20, #src_offset
+            |  ldrb w0, [x19, x16]
+        } else if (src_offset < 0 && (-src_offset) <= 4095) {
+            |  sub x16, x20, #(-src_offset)
+            |  ldrb w0, [x19, x16]
+        } else {
+            |  mov x16, #src_offset
+            |  add x16, x20, x16
+            |  ldrb w0, [x19, x16]
+        }
+
+        if (dst_offset == 0) {
+            |  ldrb w1, [x19, x20]
+            |  add w0, w0, w1
+            |  strb w0, [x19, x20]
+        } else if (dst_offset > 0 && dst_offset <= 4095) {
+            |  add x17, x20, #dst_offset
+            |  ldrb w1, [x19, x17]
+            |  add w0, w0, w1
+            |  strb w0, [x19, x17]
+        } else if (dst_offset < 0 && (-dst_offset) <= 4095) {
+            |  sub x17, x20, #(-dst_offset)
+            |  ldrb w1, [x19, x17]
+            |  add w0, w0, w1
+            |  strb w0, [x19, x17]
+        } else {
+            |  mov x17, #dst_offset
+            |  add x17, x20, x17
+            |  ldrb w1, [x19, x17]
+            |  add w0, w0, w1
+            |  strb w0, [x19, x17]
+        }
     }
 }
 
@@ -45,50 +88,88 @@ static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int
     // Skip zero multiplier
     if (multiplier == 0) return;
 
-    // Load source value using base+offset addressing with dynamic masking  
-    if (src_offset == 0) {
-        |  and x16, x20, x21
-        |  ldrb w0, [x19, x16]
-    } else if (src_offset > 0 && src_offset <= 4095) {
-        |  add x16, x20, #src_offset
-        |  and x16, x16, x21
-        |  ldrb w0, [x19, x16]
-    } else if (src_offset < 0 && (-src_offset) <= 4095) {
-        |  sub x16, x20, #(-src_offset)
-        |  and x16, x16, x21
-        |  ldrb w0, [x19, x16]
-    } else {
-        |  mov x16, #src_offset
-        |  add x16, x20, x16
-        |  and x16, x16, x21
-        |  ldrb w0, [x19, x16]
-    }
+    if (!g_unsafe_mode) {
+        // Safe mode: use masking
+        if (src_offset == 0) {
+            |  and x16, x20, x21
+            |  ldrb w0, [x19, x16]
+        } else if (src_offset > 0 && src_offset <= 4095) {
+            |  add x16, x20, #src_offset
+            |  and x16, x16, x21
+            |  ldrb w0, [x19, x16]
+        } else if (src_offset < 0 && (-src_offset) <= 4095) {
+            |  sub x16, x20, #(-src_offset)
+            |  and x16, x16, x21
+            |  ldrb w0, [x19, x16]
+        } else {
+            |  mov x16, #src_offset
+            |  add x16, x20, x16
+            |  and x16, x16, x21
+            |  ldrb w0, [x19, x16]
+        }
 
-    // Load from destination using base+offset addressing with dynamic masking
-    if (dst_offset == 0) {
-        |  and x17, x20, x21
-        |  ldrb w1, [x19, x17]
-    } else if (dst_offset > 0 && dst_offset <= 4095) {
-        |  add x17, x20, #dst_offset
-        |  and x17, x17, x21
-        |  ldrb w1, [x19, x17]
-    } else if (dst_offset < 0 && (-dst_offset) <= 4095) {
-        |  sub x17, x20, #(-dst_offset)
-        |  and x17, x17, x21
-        |  ldrb w1, [x19, x17]
+        if (dst_offset == 0) {
+            |  and x17, x20, x21
+            |  ldrb w1, [x19, x17]
+        } else if (dst_offset > 0 && dst_offset <= 4095) {
+            |  add x17, x20, #dst_offset
+            |  and x17, x17, x21
+            |  ldrb w1, [x19, x17]
+        } else if (dst_offset < 0 && (-dst_offset) <= 4095) {
+            |  sub x17, x20, #(-dst_offset)
+            |  and x17, x17, x21
+            |  ldrb w1, [x19, x17]
+        } else {
+            |  mov x17, #dst_offset
+            |  add x17, x20, x17
+            |  and x17, x17, x21
+            |  ldrb w1, [x19, x17]
+        }
+        |  mov w2, #multiplier
+        |  mul w3, w0, w2
+        |  add w1, w1, w3
+        |  strb w1, [x19, x17]
     } else {
-        |  mov x17, #dst_offset
-        |  add x17, x20, x17
-        |  and x17, x17, x21
-        |  ldrb w1, [x19, x17]
+        // Unsafe mode: direct access like pre-masking version
+        if (src_offset == 0) {
+            |  ldrb w0, [x19, x20]
+        } else if (src_offset > 0 && src_offset <= 4095) {
+            |  add x16, x20, #src_offset
+            |  ldrb w0, [x19, x16]
+        } else if (src_offset < 0 && (-src_offset) <= 4095) {
+            |  sub x16, x20, #(-src_offset)
+            |  ldrb w0, [x19, x16]
+        } else {
+            |  mov x16, #src_offset
+            |  add x16, x20, x16
+            |  ldrb w0, [x19, x16]
+        }
+
+        if (dst_offset == 0) {
+            |  ldrb w1, [x19, x20]
+        } else if (dst_offset > 0 && dst_offset <= 4095) {
+            |  add x17, x20, #dst_offset
+            |  ldrb w1, [x19, x17]
+        } else if (dst_offset < 0 && (-dst_offset) <= 4095) {
+            |  sub x17, x20, #(-dst_offset)
+            |  ldrb w1, [x19, x17]
+        } else {
+            |  mov x17, #dst_offset
+            |  add x17, x20, x17
+            |  ldrb w1, [x19, x17]
+        }
+        |  mov w2, #multiplier
+        |  mul w3, w0, w2
+        |  add w1, w1, w3
+        if (dst_offset == 0) {
+            |  strb w1, [x19, x20]
+        } else {
+            |  strb w1, [x19, x17]
+        }
     }
-    |  mov w2, #multiplier
-    |  mul w3, w0, w2
-    |  add w1, w1, w3
-    |  strb w1, [x19, x17]
 }
 
-static void compile_bf_prologue(dasm_State **Dst, size_t memory_size) {
+static void compile_bf_prologue(dasm_State **Dst, size_t memory_size, bool unsafe_mode) {
     |  stp x29, x30, [sp, #-64]!
     |  mov x29, sp
     |  str x19, [sp, #16]
@@ -112,7 +193,7 @@ static void compile_bf_prologue(dasm_State **Dst, size_t memory_size) {
     }
 }
 
-static void compile_bf_epilogue(dasm_State **Dst) {
+static void compile_bf_epilogue(dasm_State **Dst, bool unsafe_mode) {
     |  mov w0, #0
     |  ldr x21, [sp, #32]
     |  ldr x20, [sp, #24]
@@ -122,14 +203,22 @@ static void compile_bf_epilogue(dasm_State **Dst) {
 }
 
 static void compile_bf_loop_start(dasm_State **Dst, int loop_end) {
-    |  and x16, x20, x21
-    |  ldrb w0, [x19, x16]
+    if (!g_unsafe_mode) {
+        |  and x16, x20, x21
+        |  ldrb w0, [x19, x16]
+    } else {
+        |  ldrb w0, [x19, x20]              // Load from base + current offset
+    }
     |  cbz w0, =>(loop_end)
 }
 
 static void compile_bf_loop_end(dasm_State **Dst, int back_to_start) {
-    |  and x16, x20, x21
-    |  ldrb w0, [x19, x16]
+    if (!g_unsafe_mode) {
+        |  and x16, x20, x21
+        |  ldrb w0, [x19, x16]
+    } else {
+        |  ldrb w0, [x19, x20]              // Load from base + current offset
+    }
     |  cbnz w0, =>(back_to_start)
 }
 
@@ -169,41 +258,77 @@ static void compile_bf_move_ptr(dasm_State **Dst, int count) {
 
 static void compile_bf_add_val(dasm_State **Dst, int count, int offset) {
     if (offset == 0) {
-        |  and x16, x20, x21
-        if (count > 0) {
-            if (count == 1) {
-                |  ldrb w0, [x19, x16]
-                |  add w0, w0, #1
-                |  strb w0, [x19, x16]
-            } else if (count <= 255) {
-                |  ldrb w0, [x19, x16]
-                |  add w0, w0, #count
-                |  strb w0, [x19, x16]
-            } else {
-                |  ldrb w0, [x19, x16]
-                |  mov w17, #count
-                |  add w0, w0, w17
-                |  strb w0, [x19, x16]
+        if (!g_unsafe_mode) {
+            |  and x16, x20, x21
+            if (count > 0) {
+                if (count == 1) {
+                    |  ldrb w0, [x19, x16]
+                    |  add w0, w0, #1
+                    |  strb w0, [x19, x16]
+                } else if (count <= 255) {
+                    |  ldrb w0, [x19, x16]
+                    |  add w0, w0, #count
+                    |  strb w0, [x19, x16]
+                } else {
+                    |  ldrb w0, [x19, x16]
+                    |  mov w17, #count
+                    |  add w0, w0, w17
+                    |  strb w0, [x19, x16]
+                }
+            } else if (count < 0) {
+                int abs_count = -count;
+                if (abs_count == 1) {
+                    |  ldrb w0, [x19, x16]
+                    |  sub w0, w0, #1
+                    |  strb w0, [x19, x16]
+                } else if (abs_count <= 255) {
+                    |  ldrb w0, [x19, x16]
+                    |  sub w0, w0, #abs_count
+                    |  strb w0, [x19, x16]
+                } else {
+                    |  ldrb w0, [x19, x16]
+                    |  mov w17, #abs_count
+                    |  sub w0, w0, w17
+                    |  strb w0, [x19, x16]
+                }
             }
-        } else if (count < 0) {
-            int abs_count = -count;
-            if (abs_count == 1) {
-                |  ldrb w0, [x19, x16]
-                |  sub w0, w0, #1
-                |  strb w0, [x19, x16]
-            } else if (abs_count <= 255) {
-                |  ldrb w0, [x19, x16]
-                |  sub w0, w0, #abs_count
-                |  strb w0, [x19, x16]
-            } else {
-                |  ldrb w0, [x19, x16]
-                |  mov w17, #abs_count
-                |  sub w0, w0, w17
-                |  strb w0, [x19, x16]
+        } else {
+            // Unsafe mode: direct access using x20
+            if (count > 0) {
+                if (count == 1) {
+                    |  ldrb w0, [x19, x20]
+                    |  add w0, w0, #1
+                    |  strb w0, [x19, x20]
+                } else if (count <= 255) {
+                    |  ldrb w0, [x19, x20]
+                    |  add w0, w0, #count
+                    |  strb w0, [x19, x20]
+                } else {
+                    |  ldrb w0, [x19, x20]
+                    |  mov w16, #count
+                    |  add w0, w0, w16
+                    |  strb w0, [x19, x20]
+                }
+            } else if (count < 0) {
+                int abs_count = -count;
+                if (abs_count == 1) {
+                    |  ldrb w0, [x19, x20]
+                    |  sub w0, w0, #1
+                    |  strb w0, [x19, x20]
+                } else if (abs_count <= 255) {
+                    |  ldrb w0, [x19, x20]
+                    |  sub w0, w0, #abs_count
+                    |  strb w0, [x19, x20]
+                } else {
+                    |  ldrb w0, [x19, x20]
+                    |  mov w16, #abs_count
+                    |  sub w0, w0, w16
+                    |  strb w0, [x19, x20]
+                }
             }
         }
     } else {
-        // Compute effective offset and apply dynamic masking
+        // Compute effective offset in x16
         if (offset > 0 && offset <= 4095) {
             |  add x16, x20, #offset
         } else if (offset < 0 && (-offset) <= 4095) {
@@ -212,7 +337,9 @@ static void compile_bf_add_val(dasm_State **Dst, int count, int offset) {
             |  mov x17, #offset
             |  add x16, x20, x17
         }
-        |  and x16, x16, x21
+        if (!g_unsafe_mode) {
+            |  and x16, x16, x21
+        }
 
         if (count > 0) {
             if (count == 1) {
@@ -257,8 +384,12 @@ static void compile_bf_input(dasm_State **Dst, int offset) {
     |  blr x16
 
     if (offset == 0) {
-        |  and x16, x20, x21
-        |  strb w0, [x19, x16]
+        if (!g_unsafe_mode) {
+            |  and x16, x20, x21
+            |  strb w0, [x19, x16]
+        } else {
+            |  strb w0, [x19, x20]
+        }
     } else {
         if (offset > 0 && offset <= 4095) {
             |  add x16, x20, #offset
@@ -268,15 +399,21 @@ static void compile_bf_input(dasm_State **Dst, int offset) {
             |  mov x17, #offset
             |  add x16, x20, x17
         }
-        |  and x16, x16, x21
+        if (!g_unsafe_mode) {
+            |  and x16, x16, x21
+        }
         |  strb w0, [x19, x16]
     }
 }
 
 static void compile_bf_output(dasm_State **Dst, int offset) {
     if (offset == 0) {
-        |  and x16, x20, x21
-        |  ldrb w0, [x19, x16]
+        if (!g_unsafe_mode) {
+            |  and x16, x20, x21
+            |  ldrb w0, [x19, x16]
+        } else {
+            |  ldrb w0, [x19, x20]
+        }
     } else {
         if (offset > 0 && offset <= 4095) {
             |  add x16, x20, #offset
@@ -286,7 +423,9 @@ static void compile_bf_output(dasm_State **Dst, int offset) {
             |  mov x17, #offset
             |  add x16, x20, x17
         }
-        |  and x16, x16, x21
+        if (!g_unsafe_mode) {
+            |  and x16, x16, x21
+        }
         |  ldrb w0, [x19, x16]
     }
 
@@ -309,8 +448,12 @@ static void compile_bf_set_const(dasm_State **Dst, int value, int offset) {
     }
 
     if (offset == 0) {
-        |  and x16, x20, x21
-        |  strb w0, [x19, x16]
+        if (!g_unsafe_mode) {
+            |  and x16, x20, x21
+            |  strb w0, [x19, x16]
+        } else {
+            |  strb w0, [x19, x20]
+        }
     } else {
         if (offset > 0 && offset <= 4095) {
             |  add x16, x20, #offset
@@ -320,7 +463,9 @@ static void compile_bf_set_const(dasm_State **Dst, int value, int offset) {
             |  mov x17, #offset
             |  add x16, x20, x17
         }
-        |  and x16, x16, x21
+        if (!g_unsafe_mode) {
+            |  and x16, x16, x21
+        }
         |  strb w0, [x19, x16]
     }
 }
