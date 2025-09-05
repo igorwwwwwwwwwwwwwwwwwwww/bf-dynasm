@@ -82,32 +82,38 @@ static void compile_bf_prologue(dasm_State **Dst, size_t memory_size) {
     |  mov rbp, rsp
     |  push rbx         // Save RBX (base address register)
     |  push rcx         // Save RCX (offset register)
-    |  push rdx         // Save RDX (mask register)
+    if (!g_unsafe_mode) {
+        |  push rdx     // Save RDX (mask register) only if needed
+    }
     |  push r8          // Save R8 (temporary register)
     |  push r9          // Save R9 (temporary register)
-    |  sub rsp, 8       // Align stack for function calls (16-byte alignment)
+    if (g_unsafe_mode) {
+        |  sub rsp, 16  // Align stack (one less register saved)
+    } else {
+        |  sub rsp, 8   // Align stack for function calls (16-byte alignment)
+    }
     |  mov rbx, rdi     // RBX = memory base address (passed parameter)
     |  xor rcx, rcx     // RCX = current offset (start at 0)
 
-    // Compute address mask (memory_size - 1) and store in RDX
-    size_t mask = memory_size - 1;
-    if (mask <= 0xFF) {
-        |  mov edx, mask
-    } else if (mask <= 0xFFFF) {
-        |  mov edx, mask
-    } else if (mask <= 0xFFFFFFFF) {
-        |  mov edx, mask
-    } else {
+    if (!g_unsafe_mode) {
+        // Compute address mask (memory_size - 1) and store in RDX
+        size_t mask = memory_size - 1;
         |  mov rdx, mask
     }
 }
 
 static void compile_bf_epilogue(dasm_State **Dst) {
     |  xor eax, eax
-    |  add rsp, 8       // Remove alignment padding
+    if (g_unsafe_mode) {
+        |  add rsp, 16  // Remove alignment padding (one less register saved)
+    } else {
+        |  add rsp, 8   // Remove alignment padding
+    }
     |  pop r9           // Restore R9 (temporary register)
     |  pop r8           // Restore R8 (temporary register)
-    |  pop rdx          // Restore RDX (mask register)
+    if (!g_unsafe_mode) {
+        |  pop rdx      // Restore RDX (mask register) only if needed
+    }
     |  pop rcx          // Restore RCX (offset register)
     |  pop rbx          // Restore RBX (base address register)
     |  pop rbp
@@ -226,10 +232,14 @@ static void compile_bf_add_val(dasm_State **Dst, int count, int offset) {
 
 static void compile_bf_input(dasm_State **Dst, int offset) {
     |  push rcx                              // Save RCX (offset register) before function call
-    |  push rdx                              // Save RDX (mask register) before function call
+    if (!g_unsafe_mode) {
+        |  push rdx                          // Save RDX (mask register) only if needed
+    }
     |  mov64 rax, (uintptr_t)getchar_wrapper   // Load function pointer
     |  call rax                               // Call through register
-    |  pop rdx                               // Restore RDX (mask register) after function call
+    if (!g_unsafe_mode) {
+        |  pop rdx                           // Restore RDX (mask register) only if needed
+    }
     |  pop rcx                               // Restore RCX (offset register) after function call
     if (offset == 0) {
         if (!g_unsafe_mode) {
@@ -267,10 +277,14 @@ static void compile_bf_output(dasm_State **Dst, int offset) {
         |  movzx edi, byte [rbx+rax]          // Load byte from base[offset] and put in first argument register
     }
     |  push rcx                              // Save RCX (offset register) before function call
-    |  push rdx                              // Save RDX (mask register) before function call
+    if (!g_unsafe_mode) {
+        |  push rdx                          // Save RDX (mask register) only if needed
+    }
     |  mov64 rax, (uintptr_t)putchar_wrapper  // Load function pointer into rax
     |  call rax                               // Call through register
-    |  pop rdx                               // Restore RDX (mask register) after function call
+    if (!g_unsafe_mode) {
+        |  pop rdx                           // Restore RDX (mask register) only if needed
+    }
     |  pop rcx                               // Restore RCX (offset register) after function call
 }
 
@@ -280,21 +294,9 @@ static void compile_bf_set_const(dasm_State **Dst, int value, int offset) {
         if (!g_unsafe_mode) {
             |  mov rax, rcx              // rax = current offset
             |  and rax, rdx              // rax = masked offset
-            if (value == 0) {
-                |  mov byte [rbx+rax], 0
-            } else if (value > 0 && value <= 255) {
-                |  mov byte [rbx+rax], value
-            } else {
-                |  mov byte [rbx+rax], (value & 0xFF)
-            }
+            |  mov byte [rbx+rax], (value & 0xFF)
         } else {
-            if (value == 0) {
-                |  mov byte [rbx+rcx], 0
-            } else if (value > 0 && value <= 255) {
-                |  mov byte [rbx+rcx], value
-            } else {
-                |  mov byte [rbx+rcx], (value & 0xFF)
-            }
+            |  mov byte [rbx+rcx], (value & 0xFF)
         }
     } else {
         |  mov rax, rcx              // rax = current offset
@@ -302,12 +304,6 @@ static void compile_bf_set_const(dasm_State **Dst, int value, int offset) {
         if (!g_unsafe_mode) {
             |  and rax, rdx          // rax = masked offset
         }
-        if (value == 0) {
-            |  mov byte [rbx+rax], 0
-        } else if (value > 0 && value <= 255) {
-            |  mov byte [rbx+rax], value
-        } else {
-            |  mov byte [rbx+rax], (value & 0xFF)
-        }
+        |  mov byte [rbx+rax], (value & 0xFF)
     }
 }

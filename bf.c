@@ -189,7 +189,7 @@ static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label
 
 static bf_func compile_bf_ast(ast_node_t *ast, bool debug_mode, bool unsafe_mode, void **code_ptr, size_t *code_size, bf_debug_info_t *debug_info, size_t memory_size) {
     g_unsafe_mode = unsafe_mode;  // Set global flag for DynASM templates
-    
+
     dasm_State *state = NULL;
     dasm_State **Dst = &state;
     dasm_init(Dst, 1);
