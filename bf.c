@@ -375,7 +375,7 @@ int main(int argc, char *argv[]) {
         ast = ast_rewrite_sequences(ast);
         ast = ast_optimize(ast);
         ast = ast_rewrite_sequences(ast);
-        // ast = ast_optimize(ast); // currently leading to invalid code
+        ast = ast_optimize(ast);
 
         if (timing_mode) {
             double phase_end = get_time_ms();
