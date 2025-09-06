@@ -9,8 +9,9 @@ A high-performance Brainfuck interpreter with Just-In-Time compilation using Dyn
 - **Multi-Architecture**: Supports both ARM64 and x64 architectures
 - **Profiling Support**: Built-in profiler with flame graph compatibility and PC-to-AST mapping
 - **Debug Mode**: Dumps AST and compiled machine code for analysis
+- **Debug Logging**: Interactive breakpoints with `!` symbol for execution tracing
 - **High Performance**: Direct native code execution with minimal overhead
-- **Modern Build System**: Bazel build system with multi-platform and sanitizer support
+- **Dual Build Systems**: Both Make (simple) and Bazel (advanced) with multi-platform and sanitizer support
 
 ## Building
 
@@ -25,6 +26,19 @@ Note: LuaJIT is built from source by the build system
 
 ### Build Commands
 
+#### Make (Simple)
+```bash
+# Install dependencies on macOS
+brew install flex bison
+
+# Build native version
+make
+
+# Build AMD64 version on ARM64 Mac
+make amd64-darwin
+```
+
+#### Bazel (Advanced)
 ```bash
 # Install dependencies on macOS
 brew install flex bison bazel
@@ -71,6 +85,9 @@ bazel run //:bf -- --no-optimize examples/hello.b
 # Show help
 bazel run //:bf -- --help
 
+# Run with timing information
+bazel run //:bf -- --timing examples/hello.b
+
 # Set custom memory size (in bytes)
 bazel run //:bf -- --memory 32768 examples/hello.b
 
@@ -101,6 +118,7 @@ The compiler includes several AST-level optimizations:
 - **Unified MUL/COPY**: `MUL` with multiplier=1 automatically uses more efficient `COPY_CELL`
 - **Offset operations**: `>+<` sequences become direct offset additions without pointer movement
 - **Constant propagation**: `[-]+++` becomes direct constant assignment (`SET_CONST(3)`)
+- **SET_CONST coalescing**: `SET_CONST(0) + ADD_VAL(-1)` becomes `SET_CONST(-1)` at same offset
 
 ## Architecture Support
 

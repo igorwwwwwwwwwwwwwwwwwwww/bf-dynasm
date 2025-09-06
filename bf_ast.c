@@ -282,8 +282,8 @@ ast_node_t* ast_optimize(ast_node_t *node) {
     }
 
     // Set + Add coalescing: detect SET_CONST followed by ADD_VAL at same offset
-    if (node->type == AST_SET_CONST && node->data.basic.offset == 0 && node->next &&
-        node->next->type == AST_ADD_VAL && node->next->data.basic.offset == 0) {
+    if (node->type == AST_SET_CONST && node->next &&
+        node->next->type == AST_ADD_VAL && node->data.basic.offset == node->next->data.basic.offset) {
 
         int final_value = node->data.basic.count + node->next->data.basic.count;
         ast_node_t *add_node = node->next;

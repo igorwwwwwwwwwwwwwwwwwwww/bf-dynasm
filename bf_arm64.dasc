@@ -68,10 +68,12 @@ static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int
             |  add w1, w1, w0
         } else if (multiplier == -1) {
             |  sub w1, w1, w0
+        } else if (multiplier < 0 && multiplier >= -255) {
+            |  mov w2, #(-multiplier)
+            |  msub w1, w0, w2, w1    // w1 = w1 - (w0 * abs(multiplier)) - fused multiply-subtract
         } else {
             |  mov w2, #multiplier
-            |  mul w3, w0, w2
-            |  add w1, w1, w3
+            |  madd w1, w0, w2, w1    // w1 = w1 + (w0 * w2) - fused multiply-add
         }
         |  strb w1, [x19, x17]
     } else {
@@ -108,10 +110,12 @@ static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int
             |  add w1, w1, w0
         } else if (multiplier == -1) {
             |  sub w1, w1, w0
+        } else if (multiplier < 0 && multiplier >= -255) {
+            |  mov w2, #(-multiplier)
+            |  msub w1, w0, w2, w1    // w1 = w1 - (w0 * abs(multiplier)) - fused multiply-subtract
         } else {
             |  mov w2, #multiplier
-            |  mul w3, w0, w2
-            |  add w1, w1, w3
+            |  madd w1, w0, w2, w1    // w1 = w1 + (w0 * w2) - fused multiply-add
         }
         if (dst_offset == 0) {
             |  strb w1, [x19, x20]
