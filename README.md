@@ -240,8 +240,10 @@ This JIT compiler provides significant performance improvements over traditional
 
 The mandelbrot benchmark was run on an Apple M1 (2020 MacBook Air), measuring against:
 
-- [BF-JIT](https://github.com/danthedaniel/BF-JIT)
-- [naegleria](https://github.com/igorwwwwwwwwwwwwwwwwwwww/naegleria) (llvm, php, wasm)
+- [optasmjit](https://github.com/eliben/code-for-blog/blob/main/2017/bfjit/optasmjit.cpp) by [Eli Bendersky](https://eli.thegreenplace.net/2017/adventures-in-jit-compilation-part-2-an-x64-jit/), via rosetta
+- [BF-JIT](https://github.com/danthedaniel/BF-JIT) by [Daniel Angell](https://danangell.com/blog/posts/brainfuck-optimizing-jit/), via rosetta
+- [bf-cranelift-jit](https://github.com/Rodrigodd/bf-compiler) by [Rodrigo Batista de Moraes](https://rodrigodd.github.io/2022/11/26/bf_compiler-part3.html), via rosetta
+- [naegleria](https://github.com/igorwwwwwwwwwwwwwwwwwwww/naegleria) by me (llvm, php, wasm)
   - LLVM was compiled with clang 17.0.0
   - PHP was run against 8.4.12, with and without JIT
   - wasm was run against these runtimes
@@ -251,94 +253,119 @@ The mandelbrot benchmark was run on an Apple M1 (2020 MacBook Air), measuring ag
     - [WasmEdge](https://github.com/WasmEdge/WasmEdge)
     - [Wazero](https://github.com/tetratelabs/wazero)
 - [brainfuck-php](https://github.com/igorw/brainfuck-php) was skipped
-  - baseline ~50 minutes. eliminating NullLogger calls ~36 minutes. optimizing jumps ~13 minutes. JIT ~10 minutes.
+  - baseline ~50 minutes. eliminating NullLogger calls ~36 minutes. optimizing jumps ~13 minutes. PHP JIT ~10 minutes.
 
 Results:
 
 ```
-$ hyperfine --warmup 3 './bf examples/mandelbrot.b' './bf --unsafe examples/mandelbrot.b' './bf_amd64_darwin examples/mandelbrot.b' './bf_amd64_darwin --unsafe examples/mandelbrot.b' '~/code/BF-JIT/target/release/fucker examples/mandelbrot.b' '~/code/BF-JIT/target/x86_64-apple-darwin/release/fucker examples/mandelbrot.b' '~/code/naegleria/mandelbrot-llvm' '~/code/naegleria/mandelbrot-llvm-opt' '~/code/naegleria/mandelbrot-llvm-opt3' 'php ~/code/naegleria/mandelbrot.php' 'php -d opcache.enable_cli=On -d opcache.jit=tracing ~/code/naegleria/mandelbrot.php' 'wasmtime ~/code/naegleria/mandelbrot.wasm' 'iwasm ~/code/naegleria/mandelbrot.wasm' 'wasmer ~/code/naegleria/mandelbrot.wasm' 'wasmedge --enable-jit ~/code/naegleria/mandelbrot.wasm' 'wazero run ~/code/naegleria/mandelbrot.wasm'
+$ hyperfine --warmup 3 './bf examples/mandelbrot.b' './bf --unsafe examples/mandelbrot.b' './bf_amd64_darwin examples/mandelbrot.b' './bf_amd64_darwin --unsafe examples/mandelbrot.b' '~/code/BF-JIT/target/release/fucker examples/mandelbrot.b' '~/code/BF-JIT/target/x86_64-apple-darwin/release/fucker examples/mandelbrot.b' '~/code/eliben-code-for-blog/2017/bfjit/optinterp examples/mandelbrot.b' '~/code/eliben-code-for-blog/2017/bfjit/optinterp2 examples/mandelbrot.b' '~/code/eliben-code-for-blog/2017/bfjit/optinterp3 examples/mandelbrot.b' '~/code/eliben-code-for-blog/2017/bfjit/optasmjit examples/mandelbrot.b' '~/code/rodrigodd-bf-compiler/target/x86_64-apple-darwin/debug/bf-cranelift-jit examples/mandelbrot.b' '~/code/naegleria/mandelbrot-llvm' '~/code/naegleria/mandelbrot-llvm-opt' '~/code/naegleria/mandelbrot-llvm-opt3' 'php ~/code/naegleria/mandelbrot.php' 'php -d opcache.enable_cli=On -d opcache.jit=tracing ~/code/naegleria/mandelbrot.php' 'wasmtime ~/code/naegleria/mandelbrot.wasm' 'iwasm ~/code/naegleria/mandelbrot.wasm' 'wasmer ~/code/naegleria/mandelbrot.wasm' 'wasmedge --enable-jit ~/code/naegleria/mandelbrot.wasm' 'wazero run ~/code/naegleria/mandelbrot.wasm'
 
 Benchmark 1: ./bf examples/mandelbrot.b
-  Time (mean ± σ):     559.3 ms ±   1.7 ms    [User: 555.4 ms, System: 3.1 ms]
-  Range (min … max):   557.7 ms … 562.7 ms    10 runs
+  Time (mean ± σ):     504.9 ms ±   0.4 ms    [User: 502.0 ms, System: 2.2 ms]
+  Range (min … max):   504.4 ms … 505.6 ms    10 runs
 
 Benchmark 2: ./bf --unsafe examples/mandelbrot.b
-  Time (mean ± σ):     458.4 ms ±   0.7 ms    [User: 455.6 ms, System: 2.1 ms]
-  Range (min … max):   457.5 ms … 459.3 ms    10 runs
+  Time (mean ± σ):     413.0 ms ±   0.3 ms    [User: 410.3 ms, System: 2.1 ms]
+  Range (min … max):   412.4 ms … 413.7 ms    10 runs
 
 Benchmark 3: ./bf_amd64_darwin examples/mandelbrot.b
-  Time (mean ± σ):     647.1 ms ±   0.7 ms    [User: 639.0 ms, System: 5.6 ms]
-  Range (min … max):   646.4 ms … 649.1 ms    10 runs
+  Time (mean ± σ):     554.8 ms ±   0.5 ms    [User: 547.5 ms, System: 4.8 ms]
+  Range (min … max):   554.3 ms … 556.1 ms    10 runs
 
 Benchmark 4: ./bf_amd64_darwin --unsafe examples/mandelbrot.b
-  Time (mean ± σ):     476.6 ms ±   0.5 ms    [User: 469.4 ms, System: 4.8 ms]
-  Range (min … max):   475.7 ms … 477.3 ms    10 runs
+  Time (mean ± σ):     420.2 ms ±   0.4 ms    [User: 413.3 ms, System: 4.4 ms]
+  Range (min … max):   419.6 ms … 421.1 ms    10 runs
 
 Benchmark 5: ~/code/BF-JIT/target/release/fucker examples/mandelbrot.b
-  Time (mean ± σ):     479.6 ms ±   0.7 ms    [User: 476.4 ms, System: 2.4 ms]
-  Range (min … max):   478.7 ms … 481.3 ms    10 runs
+  Time (mean ± σ):     480.4 ms ±   1.4 ms    [User: 477.1 ms, System: 2.4 ms]
+  Range (min … max):   478.8 ms … 483.1 ms    10 runs
 
 Benchmark 6: ~/code/BF-JIT/target/x86_64-apple-darwin/release/fucker examples/mandelbrot.b
-  Time (mean ± σ):     490.4 ms ±   0.4 ms    [User: 482.2 ms, System: 5.6 ms]
-  Range (min … max):   489.5 ms … 491.0 ms    10 runs
+  Time (mean ± σ):     490.6 ms ±   0.8 ms    [User: 482.7 ms, System: 5.4 ms]
+  Range (min … max):   489.1 ms … 491.6 ms    10 runs
 
-Benchmark 7: ~/code/naegleria/mandelbrot-llvm
-  Time (mean ± σ):     18.271 s ±  0.008 s    [User: 18.207 s, System: 0.061 s]
-  Range (min … max):   18.266 s … 18.293 s    10 runs
+Benchmark 7: ~/code/eliben-code-for-blog/2017/bfjit/optinterp examples/mandelbrot.b
+  Time (mean ± σ):     12.070 s ±  0.011 s    [User: 12.028 s, System: 0.040 s]
+  Range (min … max):   12.050 s … 12.084 s    10 runs
 
-Benchmark 8: ~/code/naegleria/mandelbrot-llvm-opt
-  Time (mean ± σ):     840.0 ms ±   0.4 ms    [User: 834.1 ms, System: 4.7 ms]
-  Range (min … max):   838.9 ms … 840.3 ms    10 runs
+Benchmark 8: ~/code/eliben-code-for-blog/2017/bfjit/optinterp2 examples/mandelbrot.b
+  Time (mean ± σ):      6.398 s ±  0.002 s    [User: 6.376 s, System: 0.021 s]
+  Range (min … max):    6.396 s …  6.402 s    10 runs
 
-Benchmark 9: ~/code/naegleria/mandelbrot-llvm-opt3
-  Time (mean ± σ):     840.1 ms ±   0.3 ms    [User: 834.1 ms, System: 4.8 ms]
-  Range (min … max):   839.7 ms … 840.7 ms    10 runs
+Benchmark 9: ~/code/eliben-code-for-blog/2017/bfjit/optinterp3 examples/mandelbrot.b
+  Time (mean ± σ):      3.167 s ±  0.005 s    [User: 3.155 s, System: 0.011 s]
+  Range (min … max):    3.162 s …  3.178 s    10 runs
 
-Benchmark 10: php ~/code/naegleria/mandelbrot.php
-  Time (mean ± σ):     43.365 s ±  1.592 s    [User: 42.717 s, System: 0.171 s]
-  Range (min … max):   42.610 s … 47.831 s    10 runs
+Benchmark 10: ~/code/eliben-code-for-blog/2017/bfjit/optasmjit examples/mandelbrot.b
+  Time (mean ± σ):     691.8 ms ±   1.7 ms    [User: 683.7 ms, System: 5.6 ms]
+  Range (min … max):   687.2 ms … 693.2 ms    10 runs
 
-Benchmark 11: php -d opcache.enable_cli=On -d opcache.jit=tracing ~/code/naegleria/mandelbrot.php
-  Time (mean ± σ):     17.531 s ±  0.080 s    [User: 17.399 s, System: 0.097 s]
-  Range (min … max):   17.431 s … 17.632 s    10 runs
+Benchmark 11: ~/code/rodrigodd-bf-compiler/target/x86_64-apple-darwin/debug/bf-cranelift-jit examples/mandelbrot.b
+  Time (mean ± σ):      2.808 s ±  0.009 s    [User: 2.784 s, System: 0.020 s]
+  Range (min … max):    2.799 s …  2.830 s    10 runs
 
-Benchmark 12: wasmtime ~/code/naegleria/mandelbrot.wasm
-  Time (mean ± σ):     744.1 ms ±   8.3 ms    [User: 734.8 ms, System: 6.6 ms]
-  Range (min … max):   739.1 ms … 767.4 ms    10 runs
+Benchmark 12: ~/code/naegleria/mandelbrot-llvm
+  Time (mean ± σ):     18.266 s ±  0.004 s    [User: 18.204 s, System: 0.060 s]
+  Range (min … max):   18.258 s … 18.273 s    10 runs
 
-Benchmark 13: iwasm ~/code/naegleria/mandelbrot.wasm
-  Time (mean ± σ):     24.195 s ±  0.043 s    [User: 24.077 s, System: 0.072 s]
-  Range (min … max):   24.137 s … 24.267 s    10 runs
+Benchmark 13: ~/code/naegleria/mandelbrot-llvm-opt
+  Time (mean ± σ):     840.0 ms ±   0.6 ms    [User: 834.0 ms, System: 4.7 ms]
+  Range (min … max):   839.0 ms … 840.8 ms    10 runs
 
-Benchmark 14: wasmer ~/code/naegleria/mandelbrot.wasm
-  Time (mean ± σ):     802.5 ms ±   3.3 ms    [User: 761.4 ms, System: 37.3 ms]
-  Range (min … max):   796.1 ms … 807.2 ms    10 runs
+Benchmark 14: ~/code/naegleria/mandelbrot-llvm-opt3
+  Time (mean ± σ):     840.2 ms ±   0.2 ms    [User: 834.1 ms, System: 4.8 ms]
+  Range (min … max):   840.0 ms … 840.6 ms    10 runs
 
-Benchmark 15: wasmedge --enable-jit ~/code/naegleria/mandelbrot.wasm
-  Time (mean ± σ):      1.544 s ±  0.068 s    [User: 1.509 s, System: 0.019 s]
-  Range (min … max):    1.497 s …  1.714 s    10 runs
+Benchmark 15: php ~/code/naegleria/mandelbrot.php
+  Time (mean ± σ):     42.717 s ±  0.055 s    [User: 42.554 s, System: 0.155 s]
+  Range (min … max):   42.635 s … 42.810 s    10 runs
 
-Benchmark 16: wazero run ~/code/naegleria/mandelbrot.wasm
-  Time (mean ± σ):      3.522 s ±  0.011 s    [User: 3.502 s, System: 0.020 s]
-  Range (min … max):    3.508 s …  3.541 s    10 runs
+Benchmark 16: php -d opcache.enable_cli=On -d opcache.jit=tracing ~/code/naegleria/mandelbrot.php
+  Time (mean ± σ):     17.486 s ±  0.107 s    [User: 17.387 s, System: 0.093 s]
+  Range (min … max):   17.379 s … 17.629 s    10 runs
+
+Benchmark 17: wasmtime ~/code/naegleria/mandelbrot.wasm
+  Time (mean ± σ):     740.9 ms ±   0.5 ms    [User: 733.9 ms, System: 6.8 ms]
+  Range (min … max):   740.4 ms … 742.0 ms    10 runs
+
+Benchmark 18: iwasm ~/code/naegleria/mandelbrot.wasm
+  Time (mean ± σ):     24.230 s ±  0.054 s    [User: 24.139 s, System: 0.088 s]
+  Range (min … max):   24.161 s … 24.304 s    10 runs
+
+Benchmark 19: wasmer ~/code/naegleria/mandelbrot.wasm
+  Time (mean ± σ):     798.1 ms ±   0.9 ms    [User: 761.3 ms, System: 36.1 ms]
+  Range (min … max):   797.0 ms … 799.6 ms    10 runs
+
+Benchmark 20: wasmedge --enable-jit ~/code/naegleria/mandelbrot.wasm
+  Time (mean ± σ):      1.513 s ±  0.007 s    [User: 1.492 s, System: 0.018 s]
+  Range (min … max):    1.503 s …  1.528 s    10 runs
+
+Benchmark 21: wazero run ~/code/naegleria/mandelbrot.wasm
+  Time (mean ± σ):      3.525 s ±  0.003 s    [User: 3.510 s, System: 0.021 s]
+  Range (min … max):    3.519 s …  3.528 s    10 runs
 
 Summary
   ./bf --unsafe examples/mandelbrot.b ran
-    1.04 ± 0.00 times faster than ./bf_amd64_darwin --unsafe examples/mandelbrot.b
-    1.05 ± 0.00 times faster than ~/code/BF-JIT/target/release/fucker examples/mandelbrot.b
-    1.07 ± 0.00 times faster than ~/code/BF-JIT/target/x86_64-apple-darwin/release/fucker examples/mandelbrot.b
+    1.02 ± 0.00 times faster than ./bf_amd64_darwin --unsafe examples/mandelbrot.b
+    1.16 ± 0.00 times faster than ~/code/BF-JIT/target/release/fucker examples/mandelbrot.b
+    1.19 ± 0.00 times faster than ~/code/BF-JIT/target/x86_64-apple-darwin/release/fucker examples/mandelbrot.b
     1.22 ± 0.00 times faster than ./bf examples/mandelbrot.b
-    1.41 ± 0.00 times faster than ./bf_amd64_darwin examples/mandelbrot.b
-    1.62 ± 0.02 times faster than wasmtime ~/code/naegleria/mandelbrot.wasm
-    1.75 ± 0.01 times faster than wasmer ~/code/naegleria/mandelbrot.wasm
-    1.83 ± 0.00 times faster than ~/code/naegleria/mandelbrot-llvm-opt
-    1.83 ± 0.00 times faster than ~/code/naegleria/mandelbrot-llvm-opt3
-    3.37 ± 0.15 times faster than wasmedge --enable-jit ~/code/naegleria/mandelbrot.wasm
-    7.68 ± 0.03 times faster than wazero run ~/code/naegleria/mandelbrot.wasm
-   38.24 ± 0.18 times faster than php -d opcache.enable_cli=On -d opcache.jit=tracing ~/code/naegleria/mandelbrot.php
-   39.86 ± 0.06 times faster than ~/code/naegleria/mandelbrot-llvm
-   52.78 ± 0.12 times faster than iwasm ~/code/naegleria/mandelbrot.wasm
-   94.60 ± 3.48 times faster than php ~/code/naegleria/mandelbrot.php
+    1.34 ± 0.00 times faster than ./bf_amd64_darwin examples/mandelbrot.b
+    1.67 ± 0.00 times faster than ~/code/eliben-code-for-blog/2017/bfjit/optasmjit examples/mandelbrot.b
+    1.79 ± 0.00 times faster than wasmtime ~/code/naegleria/mandelbrot.wasm
+    1.93 ± 0.00 times faster than wasmer ~/code/naegleria/mandelbrot.wasm
+    2.03 ± 0.00 times faster than ~/code/naegleria/mandelbrot-llvm-opt
+    2.03 ± 0.00 times faster than ~/code/naegleria/mandelbrot-llvm-opt3
+    3.66 ± 0.02 times faster than wasmedge --enable-jit ~/code/naegleria/mandelbrot.wasm
+    6.80 ± 0.02 times faster than ~/code/rodrigodd-bf-compiler/target/x86_64-apple-darwin/debug/bf-cranelift-jit examples/mandelbrot.b
+    7.67 ± 0.01 times faster than ~/code/eliben-code-for-blog/2017/bfjit/optinterp3 examples/mandelbrot.b
+    8.53 ± 0.01 times faster than wazero run ~/code/naegleria/mandelbrot.wasm
+   15.49 ± 0.01 times faster than ~/code/eliben-code-for-blog/2017/bfjit/optinterp2 examples/mandelbrot.b
+   29.22 ± 0.04 times faster than ~/code/eliben-code-for-blog/2017/bfjit/optinterp examples/mandelbrot.b
+   42.34 ± 0.26 times faster than php -d opcache.enable_cli=On -d opcache.jit=tracing ~/code/naegleria/mandelbrot.php
+   44.23 ± 0.04 times faster than ~/code/naegleria/mandelbrot-llvm
+   58.66 ± 0.14 times faster than iwasm ~/code/naegleria/mandelbrot.wasm
+  103.42 ± 0.16 times faster than php ~/code/naegleria/mandelbrot.php
 ```
 
 ## License
