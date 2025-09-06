@@ -129,7 +129,7 @@ static void dump_code_hex(void *code, size_t size) {
     fprintf(stderr, "\n");
 }
 
-static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label, bf_debug_info_t *debug, int *debug_label) {
+static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label, bf_debug_info_t *debug, int *debug_label, bool debug_mode) {
     if (!node) return next_label;
 
     if (debug && debug_label) {
@@ -160,7 +160,7 @@ static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label
             int end_label = next_label++;
             compile_bf_loop_start(Dst, end_label);
             compile_bf_label(Dst, start_label);
-            next_label = ast_compile_direct(node->data.loop.body, Dst, next_label, debug, debug_label);
+            next_label = ast_compile_direct(node->data.loop.body, Dst, next_label, debug, debug_label, debug_mode);
             compile_bf_loop_end(Dst, start_label);
             compile_bf_label(Dst, end_label);
             break;
@@ -174,11 +174,15 @@ static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label
         case AST_MUL:
             compile_bf_mul(Dst, node->data.mul.multiplier, node->data.mul.src_offset, node->data.mul.dst_offset);
             break;
+
+        case AST_DEBUG_LOG:
+            compile_bf_debug_log(Dst, debug_mode, node->line, node->column);
+            break;
     }
 
     // Continue with next node
     if (node->next) {
-        next_label = ast_compile_direct(node->next, Dst, next_label, debug, debug_label);
+        next_label = ast_compile_direct(node->next, Dst, next_label, debug, debug_label, debug_mode);
     }
 
     return next_label;
@@ -198,7 +202,7 @@ static bf_func compile_bf_ast(ast_node_t *ast, bool debug_mode, bool unsafe_mode
     compile_bf_prologue(Dst, memory_size);
 
     int debug_label_counter = MAX_NESTING * 2; // Start debug labels after loop labels
-    ast_compile_direct(ast, Dst, 0, debug_info, debug_info ? &debug_label_counter : NULL);
+    ast_compile_direct(ast, Dst, 0, debug_info, debug_info ? &debug_label_counter : NULL, debug_mode);
 
     compile_bf_epilogue(Dst);
 
@@ -255,21 +259,24 @@ int main(int argc, char *argv[]) {
     const char *profile_output = NULL;
     size_t memory_size = BF_DEFAULT_MEMORY_SIZE;
     size_t memory_offset = 4096;  // Default 4KB offset for negative access
-    int arg_offset = 1;
+    int arg_offset = -1;
 
-    for (int i = 1; i < argc && argv[i][0] == '-'; i++) {
+    for (int i = 1; i < argc; i++) {
+        if (argv[i][0] != '-') {
+            // Non-flag argument, assume it's the filename
+            if (arg_offset == -1) {
+                arg_offset = i;
+            }
+            continue;
+        }
         if (strcmp(argv[i], "--debug") == 0) {
             debug_mode = true;
-            arg_offset++;
         } else if (strcmp(argv[i], "--timing") == 0) {
             timing_mode = true;
-            arg_offset++;
         } else if (strcmp(argv[i], "--no-optimize") == 0) {
             optimize = false;
-            arg_offset++;
         } else if (strcmp(argv[i], "--unsafe") == 0) {
             unsafe_mode = true;
-            arg_offset++;
         } else if (strcmp(argv[i], "--profile") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "Error: --profile requires a filename\n");
@@ -278,7 +285,6 @@ int main(int argc, char *argv[]) {
             profile_mode = true;
             profile_output = argv[i + 1];
             i++;
-            arg_offset += 2;
         } else if (strcmp(argv[i], "--memory") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "Error: --memory requires a size in bytes\n");
@@ -291,7 +297,6 @@ int main(int argc, char *argv[]) {
                 return 1;
             }
             i++;
-            arg_offset += 2;
         } else if (strcmp(argv[i], "--memory-offset") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "Error: --memory-offset requires a size in bytes\n");
@@ -304,10 +309,8 @@ int main(int argc, char *argv[]) {
                 return 1;
             }
             i++;
-            arg_offset += 2;
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             show_help = true;
-            arg_offset++;
             break;
         } else {
             fprintf(stderr, "Unknown flag: %s\n", argv[i]);
@@ -315,7 +318,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    if (show_help || argc < arg_offset + 1) {
+    if (show_help || arg_offset == -1) {
         FILE *stream = show_help ? stdout : stderr;
         fprintf(stream, "Usage: %s [options] <brainfuck_file>\n", argv[0]);
         fprintf(stream, "\nOptions:\n");
@@ -371,6 +374,8 @@ int main(int argc, char *argv[]) {
     if (optimize) {
         ast = ast_rewrite_sequences(ast);
         ast = ast_optimize(ast);
+        ast = ast_rewrite_sequences(ast);
+        // ast = ast_optimize(ast); // currently leading to invalid code
 
         if (timing_mode) {
             double phase_end = get_time_ms();

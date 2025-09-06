@@ -16,6 +16,10 @@ static int getchar_wrapper(void) {
     return c;
 }
 
+static void debug_log_location(int line, int column) {
+    fprintf(stderr, "DEBUG: Line %d, Column %d\n", line, column);
+    fflush(stderr);
+}
 
 // ARM64-specific multiplication optimization
 static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int dst_offset) {
@@ -59,7 +63,7 @@ static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int
             |  and x17, x17, x21
             |  ldrb w1, [x19, x17]
         }
-        
+
         if (multiplier == 1) {
             |  add w1, w1, w0
         } else if (multiplier == -1) {
@@ -99,7 +103,7 @@ static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int
             |  add x17, x20, x17
             |  ldrb w1, [x19, x17]
         }
-        
+
         if (multiplier == 1) {
             |  add w1, w1, w0
         } else if (multiplier == -1) {
@@ -125,7 +129,7 @@ static void compile_bf_prologue(dasm_State **Dst, size_t memory_size) {
     |  str x21, [sp, #32]
     |  mov x19, x0
     |  mov x20, #0
-    
+
     // Compute address mask (memory_size - 1) and store in X21
     size_t mask = memory_size - 1;
     if ((mask & 0xFFFF) == mask) {
@@ -325,11 +329,17 @@ static void compile_bf_add_val(dasm_State **Dst, int count, int offset) {
 }
 
 static void compile_bf_input(dasm_State **Dst, int offset) {
+    // Save temporary registers
+    |  stp x16, x17, [sp, #-16]!
+
     |  mov x16, #(uintptr_t)getchar_wrapper & 0xffff
     |  movk x16, #((uintptr_t)getchar_wrapper >> 16) & 0xffff, lsl #16
     |  movk x16, #((uintptr_t)getchar_wrapper >> 32) & 0xffff, lsl #32
     |  movk x16, #((uintptr_t)getchar_wrapper >> 48) & 0xffff, lsl #48
     |  blr x16
+
+    // Restore temporary registers
+    |  ldp x16, x17, [sp], #16
 
     if (offset == 0) {
         if (!g_unsafe_mode) {
@@ -378,11 +388,18 @@ static void compile_bf_output(dasm_State **Dst, int offset) {
     }
 
     |  sxtb w0, w0
+
+    // Save temporary registers
+    |  stp x16, x17, [sp, #-16]!
+
     |  mov x17, #(uintptr_t)putchar_wrapper & 0xffff
     |  movk x17, #((uintptr_t)putchar_wrapper >> 16) & 0xffff, lsl #16
     |  movk x17, #((uintptr_t)putchar_wrapper >> 32) & 0xffff, lsl #32
     |  movk x17, #((uintptr_t)putchar_wrapper >> 48) & 0xffff, lsl #48
     |  blr x17
+
+    // Restore temporary registers
+    |  ldp x16, x17, [sp], #16
 }
 
 // ARM64-specific set constant optimization
@@ -416,4 +433,25 @@ static void compile_bf_set_const(dasm_State **Dst, int value, int offset) {
         }
         |  strb w0, [x19, x16]
     }
+}
+
+// ARM64-specific debug log implementation
+static void compile_bf_debug_log(dasm_State **Dst, bool debug_mode, int line, int column) {
+    if (debug_mode) {
+        // Save temporary registers that we use in execution
+        |  stp x16, x17, [sp, #-16]!
+
+        // Pass line and column as arguments
+        |  mov w0, #line
+        |  mov w1, #column
+        |  mov x16, #(uintptr_t)debug_log_location & 0xffff
+        |  movk x16, #((uintptr_t)debug_log_location >> 16) & 0xffff, lsl #16
+        |  movk x16, #((uintptr_t)debug_log_location >> 32) & 0xffff, lsl #32
+        |  movk x16, #((uintptr_t)debug_log_location >> 48) & 0xffff, lsl #48
+        |  blr x16
+
+        // Restore temporary registers
+        |  ldp x16, x17, [sp], #16
+    }
+    // Otherwise it's a no-op
 }

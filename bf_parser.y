@@ -54,7 +54,7 @@ ast_node_t* parse_bf_program(const char *program);
     int yylex(YYSTYPE *yylval_param, YYLTYPE *yylloc_param, yyscan_t yyscanner);
 }
 
-%token MOVE_RIGHT MOVE_LEFT INC_VAL DEC_VAL OUTPUT INPUT LOOP_START LOOP_END
+%token MOVE_RIGHT MOVE_LEFT INC_VAL DEC_VAL OUTPUT INPUT LOOP_START LOOP_END DEBUG_LOG
 %type <node> program statement_list statement loop
 
 %start program
@@ -86,6 +86,7 @@ statement:
     | DEC_VAL               { $$ = ast_create_add(-1, 0); ast_set_location($$, @1.first_line, @1.first_column); }
     | OUTPUT                { $$ = ast_create_output(0); ast_set_location($$, @1.first_line, @1.first_column); }
     | INPUT                 { $$ = ast_create_input(0); ast_set_location($$, @1.first_line, @1.first_column); }
+    | DEBUG_LOG             { $$ = ast_create_debug_log(); ast_set_location($$, @1.first_line, @1.first_column); }
     | loop                  { $$ = $1; }
     ;
 

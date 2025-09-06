@@ -30,6 +30,7 @@ void reset_column(void) { current_column = 1; }
 ","         { return INPUT; }
 "["         { return LOOP_START; }
 "]"         { return LOOP_END; }
+"!"         { return DEBUG_LOG; }
 
 [ \t]+      { /* ignore whitespace */ }
 \n          { current_column = 1; /* reset column on newline */ }

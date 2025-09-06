@@ -10,6 +10,7 @@ typedef enum {
     AST_OUTPUT,         // .
     AST_INPUT,          // ,
     AST_LOOP,           // [...]
+    AST_DEBUG_LOG,      // ! (debug log output)
 
     // Optimized high-level operations
     AST_SET_CONST,      // Direct constant assignment (includes clear cell as SET_CONST(0))
@@ -43,6 +44,7 @@ ast_node_t* ast_create_add(int count, int offset);
 ast_node_t* ast_create_output(int offset);
 ast_node_t* ast_create_input(int offset);
 ast_node_t* ast_create_loop(ast_node_t *body);
+ast_node_t* ast_create_debug_log();
 ast_node_t* ast_create_sequence(ast_node_t *first, ast_node_t *second);
 
 // Optimized AST nodes

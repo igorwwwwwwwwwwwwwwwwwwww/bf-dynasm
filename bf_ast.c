@@ -43,6 +43,11 @@ ast_node_t* ast_create_loop(ast_node_t *body) {
     return node;
 }
 
+ast_node_t* ast_create_debug_log() {
+    ast_node_t *node = ast_create_node(AST_DEBUG_LOG);
+    return node;
+}
+
 ast_node_t* ast_create_sequence(ast_node_t *first, ast_node_t *second) {
     if (!first) return second;
     if (!second) return first;
@@ -89,6 +94,7 @@ static const char* ast_type_name(ast_node_type_t type) {
         case AST_OUTPUT: return "OUTPUT";
         case AST_INPUT: return "INPUT";
         case AST_LOOP: return "LOOP";
+        case AST_DEBUG_LOG: return "DEBUG_LOG";
         case AST_SET_CONST: return "SET_CONST";
         case AST_MUL: return "MUL";
         default: return "UNKNOWN";
@@ -359,7 +365,10 @@ ast_node_t* ast_rewrite_sequences(ast_node_t *node) {
                     // Update SET_CONST to use current offset
                     rewrite_current->data.basic.offset += current_offset;
 
-                    // Note: AST_COPY_CELL is now eliminated - converted to AST_MUL in ast_create_copy_cell
+                }  else if (rewrite_current->type == AST_MUL) {
+                    // Update MUL to use current offset
+                    rewrite_current->data.mul.src_offset += current_offset;
+                    rewrite_current->data.mul.dst_offset += current_offset;
                 }
 
                 rewrite_current = rewrite_current->next;

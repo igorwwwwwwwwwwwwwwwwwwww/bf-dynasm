@@ -16,6 +16,10 @@ static int getchar_wrapper(void) {
     return c;
 }
 
+static void debug_log_location(int line, int column) {
+    fprintf(stderr, "DEBUG: Line %d, Column %d\n", line, column);
+    fflush(stderr);
+}
 
 // AMD64-specific multiplication optimization
 static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int dst_offset) {
@@ -25,11 +29,11 @@ static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int
     if (g_unsafe_mode) {
         // Direct pointer approach
         |  movzx r8d, byte [rbx+src_offset]  // Load from direct pointer + src_offset
-        
+
         if (multiplier == 1) {
             |  add byte [rbx+dst_offset], r8b   // target += source
         } else if (multiplier == -1) {
-            |  sub byte [rbx+dst_offset], r8b   // target -= source  
+            |  sub byte [rbx+dst_offset], r8b   // target -= source
         } else {
             |  mov r9d, multiplier               // r9d = multiplier
             |  imul r8d, r9d                     // r8d = source * multiplier
@@ -234,8 +238,12 @@ static void compile_bf_add_val(dasm_State **Dst, int count, int offset) {
 }
 
 static void compile_bf_input(dasm_State **Dst, int offset) {
+    // Save temporary registers used during execution
+    |  push rax
+    |  push r8
+    |  push r9
     if (!g_unsafe_mode) {
-        |  push rcx                          // Save RCX (offset register) before function call  
+        |  push rcx                          // Save RCX (offset register) before function call
         |  push rdx                          // Save RDX (mask register) before function call
     }
     |  mov64 rax, (uintptr_t)getchar_wrapper   // Load function pointer
@@ -244,7 +252,11 @@ static void compile_bf_input(dasm_State **Dst, int offset) {
         |  pop rdx                           // Restore RDX (mask register) after function call
         |  pop rcx                           // Restore RCX (offset register) after function call
     }
-    
+    // Restore temporary registers
+    |  pop r9
+    |  pop r8
+    |  pop rax
+
     if (offset == 0) {
         if (g_unsafe_mode) {
             |  mov [rbx], al                 // Direct store to current cell
@@ -284,7 +296,11 @@ static void compile_bf_output(dasm_State **Dst, int offset) {
             |  movzx edi, byte [rbx+rax]         // Load byte from base[offset]
         }
     }
-    
+
+    // Save temporary registers used during execution
+    |  push rax
+    |  push r8
+    |  push r9
     if (!g_unsafe_mode) {
         |  push rcx                              // Save RCX (offset register) before function call
         |  push rdx                              // Save RDX (mask register) before function call
@@ -295,6 +311,10 @@ static void compile_bf_output(dasm_State **Dst, int offset) {
         |  pop rdx                               // Restore RDX (mask register) after function call
         |  pop rcx                               // Restore RCX (offset register) after function call
     }
+    // Restore temporary registers
+    |  pop r9
+    |  pop r8
+    |  pop rax
 }
 
 // AMD64-specific set constant optimization
@@ -317,4 +337,26 @@ static void compile_bf_set_const(dasm_State **Dst, int value, int offset) {
             |  mov byte [rbx+rax], (value & 0xFF)    // Store to computed offset
         }
     }
+}
+
+// AMD64-specific debug log implementation
+static void compile_bf_debug_log(dasm_State **Dst, bool debug_mode, int line, int column) {
+    if (debug_mode) {
+        // Save temporary registers that we use in execution
+        |  push rax
+        |  push r8
+        |  push r9
+
+        // Pass line and column as arguments (System V AMD64 ABI: rdi, rsi)
+        |  mov edi, line
+        |  mov esi, column
+        |  mov rax, (uintptr_t)debug_log_location
+        |  call rax
+
+        // Restore temporary registers
+        |  pop r9
+        |  pop r8
+        |  pop rax
+    }
+    // Otherwise it's a no-op
 }
