@@ -1,0 +1,5 @@
+build-*
+deps/
+*.uf2
+*.elf
+*.map

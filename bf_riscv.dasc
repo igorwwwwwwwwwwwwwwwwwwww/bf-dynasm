@@ -1,0 +1,301 @@
+|.arch riscv64
+|.actionlist actions
+|.section code
+
+// Access to global unsafe mode flag
+extern bool g_unsafe_mode;
+
+static int putchar_wrapper(int c) {
+    return putchar(c);
+}
+
+static int getchar_wrapper(void) {
+    int c = getchar();
+    if (c == EOF) return 0;
+    return c;
+}
+
+static void debug_log_location(int line, int column) {
+    fprintf(stderr, "DEBUG: Line %d, Column %d\n", line, column);
+    fflush(stderr);
+}
+
+static void compile_bf_mul(dasm_State **Dst, int multiplier, int src_offset, int dst_offset) {
+    if (multiplier == 0) return;
+
+    if (!g_unsafe_mode) {
+        if (src_offset == 0) {
+            |  and x5, x19, x20
+            |  add x5, x18, x5
+            |  lbu x6, 0(x5)
+        } else {
+            |  li x5, src_offset
+            |  add x5, x19, x5
+            |  and x5, x5, x20
+            |  add x5, x18, x5
+            |  lbu x6, 0(x5)
+        }
+
+        if (dst_offset == 0) {
+            |  and x7, x19, x20
+            |  add x7, x18, x7
+            |  lbu x28, 0(x7)
+        } else {
+            |  li x7, dst_offset
+            |  add x7, x19, x7
+            |  and x7, x7, x20
+            |  add x7, x18, x7
+            |  lbu x28, 0(x7)
+        }
+
+        if (multiplier == 1) {
+            |  add x28, x28, x6
+        } else if (multiplier == -1) {
+            |  sub x28, x28, x6
+        } else {
+            |  li x29, multiplier
+            |  mul x29, x6, x29
+            |  add x28, x28, x29
+        }
+        |  sb x28, 0(x7)
+    } else {
+        if (src_offset == 0) {
+            |  lbu x6, 0(x18)
+        } else if (src_offset >= -2048 && src_offset <= 2047) {
+            |  lbu x6, src_offset(x18)
+        } else {
+            |  li x5, src_offset
+            |  add x5, x18, x5
+            |  lbu x6, 0(x5)
+        }
+
+        if (dst_offset == 0) {
+            |  lbu x28, 0(x18)
+        } else if (dst_offset >= -2048 && dst_offset <= 2047) {
+            |  lbu x28, dst_offset(x18)
+        } else {
+            |  li x7, dst_offset
+            |  add x7, x18, x7
+            |  lbu x28, 0(x7)
+        }
+
+        if (multiplier == 1) {
+            |  add x28, x28, x6
+        } else if (multiplier == -1) {
+            |  sub x28, x28, x6
+        } else {
+            |  li x29, multiplier
+            |  mul x29, x6, x29
+            |  add x28, x28, x29
+        }
+
+        if (dst_offset == 0) {
+            |  sb x28, 0(x18)
+        } else if (dst_offset >= -2048 && dst_offset <= 2047) {
+            |  sb x28, dst_offset(x18)
+        } else {
+            |  li x7, dst_offset
+            |  add x7, x18, x7
+            |  sb x28, 0(x7)
+        }
+    }
+}
+
+static void compile_bf_prologue(dasm_State **Dst, size_t memory_size) {
+    |  addi sp, sp, -48
+    |  sd ra, 40(sp)
+    |  sd x18, 32(sp)
+    |  sd x19, 24(sp)
+    |  sd x20, 16(sp)
+    |  mv x18, x10
+    |  li x19, 0
+
+    size_t mask = memory_size - 1;
+    |  li x20, mask
+}
+
+static void compile_bf_epilogue(dasm_State **Dst) {
+    |  li x10, 0
+    |  ld x20, 16(sp)
+    |  ld x19, 24(sp)
+    |  ld x18, 32(sp)
+    |  ld ra, 40(sp)
+    |  addi sp, sp, 48
+    |  ret
+}
+
+static void compile_bf_loop_start(dasm_State **Dst, int loop_end) {
+    if (!g_unsafe_mode) {
+        |  and x5, x19, x20
+        |  add x5, x18, x5
+        |  lbu x6, 0(x5)
+    } else {
+        |  lbu x6, 0(x18)
+    }
+    |  beq x6, x0, =>(loop_end)
+}
+
+static void compile_bf_loop_end(dasm_State **Dst, int back_to_start) {
+    if (!g_unsafe_mode) {
+        |  and x5, x19, x20
+        |  add x5, x18, x5
+        |  lbu x6, 0(x5)
+    } else {
+        |  lbu x6, 0(x18)
+    }
+    |  bne x6, x0, =>(back_to_start)
+}
+
+static void compile_bf_label(dasm_State **Dst, int label) {
+    |=>(label):
+}
+
+static void compile_bf_debug_label(dasm_State **Dst, int debug_label) {
+    |=>(debug_label):
+}
+
+static void compile_bf_move_ptr(dasm_State **Dst, int count) {
+    if (g_unsafe_mode) {
+        if (count > 0) {
+            if (count <= 2047) {
+                |  addi x18, x18, count
+            } else {
+                |  li x5, count
+                |  add x18, x18, x5
+            }
+        } else if (count < 0) {
+            if (count >= -2048) {
+                |  addi x18, x18, count
+            } else {
+                |  li x5, count
+                |  add x18, x18, x5
+            }
+        }
+    } else {
+        if (count > 0) {
+            if (count <= 2047) {
+                |  addi x19, x19, count
+            } else {
+                |  li x5, count
+                |  add x19, x19, x5
+            }
+        } else if (count < 0) {
+            if (count >= -2048) {
+                |  addi x19, x19, count
+            } else {
+                |  li x5, count
+                |  add x19, x19, x5
+            }
+        }
+    }
+}
+
+static void compile_bf_add_val(dasm_State **Dst, int count, int offset) {
+    if (!g_unsafe_mode) {
+        |  li x5, offset
+        |  add x5, x19, x5
+        |  and x5, x5, x20
+        |  add x5, x18, x5
+        |  lbu x6, 0(x5)
+        if (count != 0) {
+            |  li x7, count
+            |  add x6, x6, x7
+            |  sb x6, 0(x5)
+        }
+    } else {
+        if (offset == 0) {
+            |  lbu x6, 0(x18)
+            if (count != 0) {
+                |  li x7, count
+                |  add x6, x6, x7
+                |  sb x6, 0(x18)
+            }
+        } else if (offset >= -2048 && offset <= 2047) {
+            |  lbu x6, offset(x18)
+            if (count != 0) {
+                |  li x7, count
+                |  add x6, x6, x7
+                |  sb x6, offset(x18)
+            }
+        } else {
+            |  li x5, offset
+            |  add x5, x18, x5
+            |  lbu x6, 0(x5)
+            if (count != 0) {
+                |  li x7, count
+                |  add x6, x6, x7
+                |  sb x6, 0(x5)
+            }
+        }
+    }
+}
+
+static void compile_bf_input(dasm_State **Dst, int offset) {
+    |  li x5, (uintptr_t)getchar_wrapper
+    |  jalr x5
+
+    if (!g_unsafe_mode) {
+        |  li x5, offset
+        |  add x5, x19, x5
+        |  and x5, x5, x20
+        |  add x5, x18, x5
+        |  sb x10, 0(x5)
+    } else if (offset == 0) {
+        |  sb x10, 0(x18)
+    } else if (offset >= -2048 && offset <= 2047) {
+        |  sb x10, offset(x18)
+    } else {
+        |  li x5, offset
+        |  add x5, x18, x5
+        |  sb x10, 0(x5)
+    }
+}
+
+static void compile_bf_output(dasm_State **Dst, int offset) {
+    if (!g_unsafe_mode) {
+        |  li x5, offset
+        |  add x5, x19, x5
+        |  and x5, x5, x20
+        |  add x5, x18, x5
+        |  lbu x10, 0(x5)
+    } else if (offset == 0) {
+        |  lbu x10, 0(x18)
+    } else if (offset >= -2048 && offset <= 2047) {
+        |  lbu x10, offset(x18)
+    } else {
+        |  li x5, offset
+        |  add x5, x18, x5
+        |  lbu x10, 0(x5)
+    }
+
+    |  li x5, (uintptr_t)putchar_wrapper
+    |  jalr x5
+}
+
+static void compile_bf_set_const(dasm_State **Dst, int value, int offset) {
+    |  li x6, value
+    if (!g_unsafe_mode) {
+        |  li x5, offset
+        |  add x5, x19, x5
+        |  and x5, x5, x20
+        |  add x5, x18, x5
+        |  sb x6, 0(x5)
+    } else if (offset == 0) {
+        |  sb x6, 0(x18)
+    } else if (offset >= -2048 && offset <= 2047) {
+        |  sb x6, offset(x18)
+    } else {
+        |  li x5, offset
+        |  add x5, x18, x5
+        |  sb x6, 0(x5)
+    }
+}
+
+static void compile_bf_debug_log(dasm_State **Dst, bool debug_mode, int line, int column) {
+    if (debug_mode) {
+        |  li x10, line
+        |  li x11, column
+        |  li x5, (uintptr_t)debug_log_location
+        |  jalr x5
+    }
+}

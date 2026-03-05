@@ -1,3 +1,4 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 load("//:copts.bzl", "BF_DEFAULT_COPTS", "BF_DEFAULT_LINKOPTS")
 
 package(default_visibility = ["//visibility:public"])
@@ -59,6 +60,19 @@ genrule(
     cmd = "$(location :luajit) luajit/dynasm/dynasm.lua -o $(OUTS) $(location bf_amd64.dasc)",
 )
 
+genrule(
+    name = "bf_riscv_dasc",
+    srcs = [
+        "bf_riscv.dasc",
+        "dasm_riscv.lua",
+        "dasm_riscv32.lua",
+        "dasm_riscv64.lua",
+        ":luajit",
+    ] + glob(["luajit/dynasm/*.lua"]),
+    outs = ["bf_riscv.c"],
+    cmd = "$(location :luajit) luajit/dynasm/dynasm.lua -o $(OUTS) $(location bf_riscv.dasc)",
+)
+
 cc_library(
     name = "bf_components",
     srcs = [
@@ -84,6 +98,7 @@ cc_library(
         "luajit/dynasm/dasm_proto.h",
         "luajit/dynasm/dasm_arm64.h",
         "luajit/dynasm/dasm_x86.h",
+        "dasm_riscv.h",
     ],
     includes = ["luajit/dynasm"],
 )
@@ -93,6 +108,7 @@ cc_library(
     hdrs = [
         ":bf_arm64_dasc",
         ":bf_amd64_dasc",
+        ":bf_riscv_dasc",
     ],
     deps = [":dynasm_headers"],
 )

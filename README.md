@@ -1,12 +1,12 @@
 # DynASM Brainfuck JIT Compiler
 
-A high-performance Brainfuck interpreter with Just-In-Time compilation using DynASM for both ARM64 and x64 architectures.
+A high-performance Brainfuck interpreter with Just-In-Time compilation using DynASM for ARM64, x64, and RISC-V.
 
 ## Features
 
 - **JIT Compilation**: Compiles Brainfuck source to native machine code at runtime
 - **AST Optimizations**: Advanced optimizations including multiplication loops, offset operations, and constant propagation
-- **Multi-Architecture**: Supports both ARM64 and x64 architectures
+- **Multi-Architecture**: Supports ARM64/x64/RISC-V JIT backends
 - **Profiling Support**: Built-in profiler with flame graph compatibility and PC-to-AST mapping
 - **Debug Mode**: Dumps AST and compiled machine code for analysis
 - **Debug Logging**: Interactive breakpoints with `!` symbol for execution tracing
@@ -132,6 +132,10 @@ The compiler includes several AST-level optimizations:
 - Stack-based memory pointer for alignment
 - Register-indirect function calls
 
+### RISC-V
+- Native execution with a DynASM RISC-V backend (`riscv64`)
+- Uses the same JIT pipeline and optimization passes as ARM64/x64
+
 ```bash
 # AMD64 version (automatically uses Rosetta on ARM64 Macs)
 bazel build --config=amd64-darwin //:bf
@@ -154,6 +158,20 @@ bazel run --config=asan //:bf examples/hello.b
 # Test AMD64 with AddressSanitizer (via Rosetta)
 bazel run --config=amd64-darwin --config=asan //:bf examples/hello.b
 ```
+
+## RP2350 (Pico SDK)
+
+There is an embedded RP2350 target in `examples/rp2350`:
+
+```bash
+(cd examples/rp2350 && ./fetch-deps.sh)
+source examples/rp2350/deps/env.sh
+cmake -S examples/rp2350 -B examples/rp2350/build-riscv -DPICO_BOARD=pico2 -DPICO_PLATFORM=rp2350-riscv
+cmake --build examples/rp2350/build-riscv -j
+cmake --build examples/rp2350/build-riscv --target flash
+```
+
+See `examples/rp2350/README.md` for custom BF source selection and serial usage.
 
 ## Docker Multi-Platform Support
 
@@ -200,8 +218,8 @@ docker run --platform=linux/arm64 bf-dynasm
 
 ### DynASM Integration
 - Uses LuaJIT's DynASM for runtime assembly generation
-- Automatic architecture detection via C preprocessor macros (`__x86_64__`, `__aarch64__`)
-- Architecture-specific includes: `bf_amd64.c` for x64, `bf_arm64.c` for ARM64
+- Automatic architecture detection via C preprocessor macros (`__x86_64__`, `__aarch64__`, `__riscv`)
+- Architecture-specific includes: `bf_amd64.c` (x64), `bf_arm64.c` (ARM64), `bf_riscv.c` (RISC-V)
 - PC labels for loop management with proper nesting
 
 ### Memory Model
