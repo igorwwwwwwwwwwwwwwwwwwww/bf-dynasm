@@ -2,15 +2,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-#include <unistd.h>
 #include <sys/mman.h>
 #include <assert.h>
 #include <stdbool.h>
-#include <time.h>
 
 #include "bf_ast.h"
 #include "bf_prof.h"
 #include "bf_debug.h"
+#include "platform_posix.h"
 
 #include "bf_parser.h"
 
@@ -26,62 +25,6 @@
 
 // Global flag to control unsafe mode (accessible by DynASM templates)
 static bool g_unsafe_mode = false;
-
-// High-resolution timing helpers
-static double get_time_ms(void) {
-    struct timespec ts;
-    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
-        return 0.0;
-    }
-    return ts.tv_sec * 1000.0 + ts.tv_nsec / 1000000.0;
-}
-
-static void print_phase_time(const char *phase, double start_ms, double end_ms) {
-    fprintf(stderr, "%-20s: %8.3f ms\n", phase, end_ms - start_ms);
-}
-
-// Memory allocation with guard pages
-static char* allocate_guarded_memory(size_t size) {
-    // Get page size for alignment
-    size_t page_size = getpagesize();
-
-    // Round up size to page boundary
-    size_t aligned_size = (size + page_size - 1) & ~(page_size - 1);
-
-    // Allocate 3 regions: guard page + data + guard page
-    size_t total_size = page_size + aligned_size + page_size;
-
-    void *region = mmap(NULL, total_size, PROT_READ | PROT_WRITE,
-                       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (region == MAP_FAILED) {
-        return NULL;
-    }
-
-    char *guard1 = (char*)region;
-    char *data = guard1 + page_size;
-    char *guard2 = data + aligned_size;
-
-    // Make guard pages inaccessible (no read/write/execute)
-    if (mprotect(guard1, page_size, PROT_NONE) != 0 ||
-        mprotect(guard2, page_size, PROT_NONE) != 0) {
-        munmap(region, total_size);
-        return NULL;
-    }
-
-    return data;
-}
-
-static void free_guarded_memory(char *memory, size_t size) {
-    if (!memory) return;
-
-    size_t page_size = getpagesize();
-    size_t aligned_size = (size + page_size - 1) & ~(page_size - 1);
-    size_t total_size = page_size + aligned_size + page_size;
-
-    // Find start of the full region (guard page before data)
-    char *region_start = memory - page_size;
-    munmap(region_start, total_size);
-}
 
 typedef int (*bf_func)(char *memory);
 
@@ -103,28 +46,6 @@ typedef int (*bf_func)(char *memory);
 static void bf_error(const char *msg) {
     fprintf(stderr, "Error: %s\n", msg);
     exit(1);
-}
-
-static char *read_file(const char *filename, size_t *size) {
-    FILE *file = fopen(filename, "r");
-    if (!file) {
-        bf_error("Could not open file");
-    }
-
-    fseek(file, 0, SEEK_END);
-    *size = ftell(file);
-    fseek(file, 0, SEEK_SET);
-
-    char *content = malloc(*size + 1);
-    if (!content) {
-        bf_error("Memory allocation failed");
-    }
-
-    fread(content, 1, *size, file);
-    content[*size] = '\0';
-    fclose(file);
-
-    return content;
 }
 
 static void dump_code_hex(void *code, size_t size) {
@@ -356,15 +277,18 @@ int main(int argc, char *argv[]) {
     }
 
     // Start timing
-    double total_start = timing_mode ? get_time_ms() : 0.0;
+    double total_start = timing_mode ? platform_posix_time_ms() : 0.0;
     double phase_start = total_start;
 
     size_t program_size;
-    char *program = read_file(argv[arg_offset], &program_size);
+    char *program = platform_posix_read_file(argv[arg_offset], &program_size);
+    if (!program) {
+        bf_error("Could not open file");
+    }
 
     if (timing_mode) {
-        double phase_end = get_time_ms();
-        print_phase_time("File I/O", phase_start, phase_end);
+        double phase_end = platform_posix_time_ms();
+        platform_posix_print_phase_time("File I/O", phase_start, phase_end);
         phase_start = phase_end;
     }
 
@@ -373,8 +297,8 @@ int main(int argc, char *argv[]) {
     ast = parse_bf_program(program);
 
     if (timing_mode) {
-        double phase_end = get_time_ms();
-        print_phase_time("Parsing", phase_start, phase_end);
+        double phase_end = platform_posix_time_ms();
+        platform_posix_print_phase_time("Parsing", phase_start, phase_end);
         phase_start = phase_end;
     }
 
@@ -385,8 +309,8 @@ int main(int argc, char *argv[]) {
         ast = ast_optimize(ast);
 
         if (timing_mode) {
-            double phase_end = get_time_ms();
-            print_phase_time("AST Optimization", phase_start, phase_end);
+            double phase_end = platform_posix_time_ms();
+            platform_posix_print_phase_time("AST Optimization", phase_start, phase_end);
             phase_start = phase_end;
         }
     }
@@ -414,8 +338,8 @@ int main(int argc, char *argv[]) {
     compiled_program = compile_bf_ast(ast, debug_mode, unsafe_mode, &code_ptr, &code_size, debug_ptr, effective_memory_size);
 
     if (timing_mode) {
-        double phase_end = get_time_ms();
-        print_phase_time("JIT Compilation", phase_start, phase_end);
+        double phase_end = platform_posix_time_ms();
+        platform_posix_print_phase_time("JIT Compilation", phase_start, phase_end);
         phase_start = phase_end;
     }
 
@@ -432,22 +356,22 @@ int main(int argc, char *argv[]) {
         bf_prof_start(&profiler);
     }
 
-    char *memory = allocate_guarded_memory(memory_size);
+    char *memory = platform_posix_allocate_guarded_memory(memory_size);
     if (!memory) {
         bf_error("Memory allocation failed");
     }
 
     if (timing_mode) {
-        double phase_end = get_time_ms();
-        print_phase_time("Memory Allocation", phase_start, phase_end);
+        double phase_end = platform_posix_time_ms();
+        platform_posix_print_phase_time("Memory Allocation", phase_start, phase_end);
         phase_start = phase_end;
     }
 
     compiled_program(memory + memory_offset);
 
     if (timing_mode) {
-        double phase_end = get_time_ms();
-        print_phase_time("Program Execution", phase_start, phase_end);
+        double phase_end = platform_posix_time_ms();
+        platform_posix_print_phase_time("Program Execution", phase_start, phase_end);
         phase_start = phase_end;
     }
 
@@ -460,7 +384,7 @@ int main(int argc, char *argv[]) {
             bf_prof_cleanup(&profiler);
             if (debug_ptr) bf_debug_cleanup(debug_ptr);
             free(program);
-            free_guarded_memory(memory, memory_size);
+            platform_posix_free_guarded_memory(memory, memory_size);
             if (ast) ast_free(ast);
             return 1;
         }
@@ -478,11 +402,11 @@ int main(int argc, char *argv[]) {
     }
 
     free(program);
-    free_guarded_memory(memory, memory_size);
+    platform_posix_free_guarded_memory(memory, memory_size);
     if (timing_mode) {
-        double total_end = get_time_ms();
+        double total_end = platform_posix_time_ms();
         fprintf(stderr, "%-20s  --------\n", "");
-        print_phase_time("Total Time", total_start, total_end);
+        platform_posix_print_phase_time("Total Time", total_start, total_end);
     }
 
     if (ast) {

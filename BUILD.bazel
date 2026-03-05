@@ -117,6 +117,7 @@ cc_binary(
     name = "bf",
     srcs = [
         "bf.c",
+        "platform_posix.c",
     ],
     deps = [
         ":bf_jit",

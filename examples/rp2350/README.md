@@ -10,6 +10,7 @@ Notes:
 - Final generated JIT code is allocated from SRAM (`malloc`).
 - When enabled and available, DynASM internal growth buffers use PSRAM.
 - On some setups, physical reset after flashing is more reliable than soft reboot for clean USB CDC output start.
+- Platform-specific runtime wiring is split into `platform_posix.c` (host) and `examples/rp2350/platform_pico.c` (firmware).
 - RISC-V DynASM backend support is vendored in this repo (`dasm_riscv*.lua`, `dasm_riscv.h`) and used by `bf_riscv*.dasc`.
 - Source reference: https://github.com/plctlab/LuaJIT
 - Upstream MR reference: https://github.com/LuaJIT/LuaJIT/pull/1267

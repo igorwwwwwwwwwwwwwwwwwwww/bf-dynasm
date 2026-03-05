@@ -5,7 +5,7 @@
 #include <string.h>
 
 #include "pico/stdlib.h"
-#include "pico/stdio_usb.h"
+#include "platform_pico.h"
 #include "rp2350_psram.h"
 
 #ifndef RP2350_USE_PSRAM_DASM
@@ -58,25 +58,12 @@ static void rp2350_dasm_free(void *ptr);
 #define RP2350_JIT_OPTIMIZE 1
 #endif
 
-#ifndef RP2350_IDLE_HEARTBEAT
-#define RP2350_IDLE_HEARTBEAT 0
-#endif
-
 #ifndef RP2350_DEBUG_OUTPUT
 #define RP2350_DEBUG_OUTPUT 0
 #endif
 
-#ifndef RP2350_USB_WAIT_TIMEOUT_MS
-#define RP2350_USB_WAIT_TIMEOUT_MS 3000
-#endif
 #ifndef RP2350_DASM_CHECKSTEP_EACH_NODE
 #define RP2350_DASM_CHECKSTEP_EACH_NODE 0
-#endif
-#ifndef RP2350_PRINT_START_MARKER
-#define RP2350_PRINT_START_MARKER 1
-#endif
-#ifndef RP2350_WAIT_FOR_START_KEY
-#define RP2350_WAIT_FOR_START_KEY 0
 #endif
 
 #if RP2350_DEBUG_OUTPUT
@@ -373,32 +360,8 @@ static bf_func compile_bf_ast(ast_node_t *ast, bool unsafe_mode, size_t *code_si
     return (bf_func)code;
 }
 
-#if defined(__riscv)
-static inline uint32_t rp2350_mask_machine_timer_irq(void) {
-    // Avoid falling into the weak default machine-timer ISR entry (ebreak)
-    // while executing long-running JIT code.
-    uint32_t mie;
-    __asm__ volatile ("csrr %0, mie" : "=r"(mie));
-    uint32_t new_mie = mie & ~(1u << 7); // MTIE
-    __asm__ volatile ("csrw mie, %0" :: "r"(new_mie) : "memory");
-    return mie;
-}
-
-static inline void rp2350_restore_mie(uint32_t mie) {
-    __asm__ volatile ("csrw mie, %0" :: "r"(mie) : "memory");
-}
-
-void __not_in_flash_func(isr_riscv_machine_timer)(void) {
-    // Defensive: if MTIMER ever fires, mask MTIE and continue.
-    rp2350_mask_machine_timer_irq();
-}
-#endif
-
 int main(void) {
-    stdio_init_all();
-    setvbuf(stdout, NULL, _IONBF, 0);
-    setvbuf(stderr, NULL, _IONBF, 0);
-    setvbuf(stdin, NULL, _IONBF, 0);
+    platform_pico_init();
 
     if (BF_TAPE_MEMORY_OFFSET >= BF_TAPE_SIZE) {
         printf("[rp2350-jit] invalid tape layout: offset=%u size=%u\n",
@@ -406,10 +369,8 @@ int main(void) {
         return 1;
     }
 
-#if defined(__riscv)
     // We don't use machine-timer IRQs in this app; keep them masked globally.
-    rp2350_mask_machine_timer_irq();
-#endif
+    (void)platform_pico_jit_enter();
 #if RP2350_USE_PSRAM_DASM
     g_psram_allocator_enabled = rp2350_psram_init(RP2350_PSRAM_CS_PIN);
     RP_LOG("[rp2350-jit] psram: %s (cs=%u)\n",
@@ -417,13 +378,7 @@ int main(void) {
            (unsigned)RP2350_PSRAM_CS_PIN);
 #endif
 
-    absolute_time_t usb_deadline = make_timeout_time_ms(RP2350_USB_WAIT_TIMEOUT_MS);
-    while (!stdio_usb_connected() && absolute_time_diff_us(get_absolute_time(), usb_deadline) > 0) {
-        busy_wait_ms(10);
-    }
-    if (stdio_usb_connected()) {
-        busy_wait_ms(200);
-    }
+    platform_pico_wait_for_usb();
 
     RP_LOG("[rp2350-jit] usb connected, program_len=%u\n", g_bf_program_len);
 
@@ -445,17 +400,13 @@ int main(void) {
 #endif
 
     RP_LOG("[rp2350-jit] jit: start\n");
-#if defined(__riscv)
-    uint32_t saved_mie = rp2350_mask_machine_timer_irq();
+    uint32_t saved_mie = platform_pico_jit_enter();
     RP_LOG("[rp2350-jit] irq: MTIE masked before JIT compile/execute\n");
-#endif
     size_t code_size = 0;
     bf_func fn = compile_bf_ast(ast, false, &code_size);
     if (!fn) {
         ast_free(ast);
-#if defined(__riscv)
-        rp2350_restore_mie(saved_mie);
-#endif
+        platform_pico_jit_leave(saved_mie);
         return 1;
     }
     ast_free(ast);
@@ -470,25 +421,15 @@ int main(void) {
     char *tape = (char *)calloc(BF_TAPE_SIZE, 1);
     if (!tape) {
         RP_LOG("[rp2350-jit] tape alloc failed\n");
-        ast_free(ast);
+        platform_pico_jit_leave(saved_mie);
         return 1;
     }
     RP_LOG("[rp2350-jit] exec: enter\n");
-#if RP2350_WAIT_FOR_START_KEY
-    printf("[rp2350-jit] press any key to start output\n");
-    while (getchar_timeout_us(1000 * 1000) < 0) {
-        tight_loop_contents();
-    }
-#endif
-#if RP2350_PRINT_START_MARKER
-    // Delimit payload so host terminal can sync at frame start.
-    printf("\n[rp2350-jit] output-begin\n");
-#endif
+    platform_pico_wait_for_start_key_if_enabled();
+    platform_pico_print_output_begin_if_enabled();
     int rc = fn(tape + BF_TAPE_MEMORY_OFFSET);
-#if defined(__riscv)
-    rp2350_restore_mie(saved_mie);
+    platform_pico_jit_leave(saved_mie);
     RP_LOG("[rp2350-jit] irq: mie restored after JIT execute\n");
-#endif
     RP_LOG("[rp2350-jit] exec: return rc=%d\n", rc);
 
 #ifdef BF_ENABLE_TIMING
@@ -501,17 +442,5 @@ int main(void) {
 
     free(tape);
     RP_LOG("[rp2350-jit] done: entering idle loop\n");
-
-#if RP2350_IDLE_HEARTBEAT
-    absolute_time_t next_heartbeat = make_timeout_time_ms(1000);
-#endif
-    while (1) {
-#if RP2350_IDLE_HEARTBEAT
-        if (absolute_time_diff_us(get_absolute_time(), next_heartbeat) <= 0) {
-            RP_LOG("[rp2350-jit] idle\n");
-            next_heartbeat = make_timeout_time_ms(1000);
-        }
-#endif
-        tight_loop_contents();
-    }
+    platform_pico_idle_forever();
 }
