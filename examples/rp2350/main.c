@@ -52,8 +52,6 @@ static void rp2350_dasm_free(void *ptr);
 #define BF_TAPE_MEMORY_OFFSET 4096u
 #endif
 
-#define MAX_NESTING 1000
-
 // Keep optimization off by default on RP2350 until all optimized RV32 paths
 // are validated on-device.
 #ifndef RP2350_JIT_OPTIMIZE
