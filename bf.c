@@ -17,22 +17,15 @@
 #define BF_DEFAULT_MEMORY_SIZE 65536  // 64KB - nice power of 2
 #define MAX_NESTING 1000
 
-#if defined(__x86_64__) || defined(__x86_64) || defined(__amd64__) || defined(__amd64)
-#define BF_HAS_JIT 1
-#elif defined(__aarch64__) || defined(__arm64__)
-#define BF_HAS_JIT 1
-#elif defined(__riscv) && (__riscv_xlen == 64)
-#define BF_HAS_JIT 1
-#elif defined(__riscv)
-#define BF_HAS_JIT 0
-#else
-#error "Unsupported architecture"
+#if !defined(__x86_64__) && !defined(__x86_64) && \
+    !defined(__amd64__) && !defined(__amd64) && \
+    !defined(__aarch64__) && !defined(__arm64__) && \
+    !(defined(__riscv) && (__riscv_xlen == 64))
+#error "Unsupported architecture for JIT"
 #endif
 
-#if BF_HAS_JIT
 // Global flag to control unsafe mode (accessible by DynASM templates)
 static bool g_unsafe_mode = false;
-#endif
 
 // High-resolution timing helpers
 static double get_time_ms(void) {
@@ -134,7 +127,6 @@ static char *read_file(const char *filename, size_t *size) {
     return content;
 }
 
-#if BF_HAS_JIT
 static void dump_code_hex(void *code, size_t size) {
     fprintf(stderr, "\nDumping %zu bytes of compiled machine code:\n", size);
     unsigned char *bytes = (unsigned char *)code;
@@ -146,9 +138,7 @@ static void dump_code_hex(void *code, size_t size) {
     if (size % 16 != 0) fprintf(stderr, "\n");
     fprintf(stderr, "\n");
 }
-#endif
 
-#if BF_HAS_JIT
 static int ast_compile_direct(ast_node_t *node, dasm_State **Dst, int next_label, bf_debug_info_t *debug, int *debug_label, bool debug_mode) {
     if (!node) return next_label;
 
@@ -267,97 +257,6 @@ static bf_func compile_bf_ast(ast_node_t *ast, bool debug_mode, bool unsafe_mode
     dasm_free(Dst);
     return (bf_func)code;
 }
-#else
-static size_t bf_masked_index(long ptr, int offset, size_t mask) {
-    return ((size_t)(ptr + offset)) & mask;
-}
-
-static int execute_ast_node(ast_node_t *node, unsigned char *memory, size_t mask, bool unsafe_mode, bool debug_mode, long *ptr) {
-    for (; node; node = node->next) {
-        switch (node->type) {
-            case AST_MOVE_PTR:
-                *ptr += node->data.basic.count;
-                break;
-
-            case AST_ADD_VAL: {
-                unsigned char *cell = unsafe_mode
-                    ? memory + (*ptr + node->data.basic.offset)
-                    : memory + bf_masked_index(*ptr, node->data.basic.offset, mask);
-                *cell = (unsigned char)(*cell + node->data.basic.count);
-                break;
-            }
-
-            case AST_OUTPUT: {
-                unsigned char *cell = unsafe_mode
-                    ? memory + (*ptr + node->data.basic.offset)
-                    : memory + bf_masked_index(*ptr, node->data.basic.offset, mask);
-                putchar((int)*cell);
-                break;
-            }
-
-            case AST_INPUT: {
-                int c = getchar();
-                unsigned char *cell = unsafe_mode
-                    ? memory + (*ptr + node->data.basic.offset)
-                    : memory + bf_masked_index(*ptr, node->data.basic.offset, mask);
-                *cell = (unsigned char)((c == EOF) ? 0 : c);
-                break;
-            }
-
-            case AST_LOOP: {
-                while (1) {
-                    unsigned char *cell = unsafe_mode
-                        ? memory + *ptr
-                        : memory + bf_masked_index(*ptr, 0, mask);
-                    if (*cell == 0) break;
-                    if (execute_ast_node(node->data.loop.body, memory, mask, unsafe_mode, debug_mode, ptr) != 0) {
-                        return 1;
-                    }
-                }
-                break;
-            }
-
-            case AST_SET_CONST: {
-                unsigned char *cell = unsafe_mode
-                    ? memory + (*ptr + node->data.basic.offset)
-                    : memory + bf_masked_index(*ptr, node->data.basic.offset, mask);
-                *cell = (unsigned char)node->data.basic.count;
-                break;
-            }
-
-            case AST_MUL: {
-                if (node->data.mul.multiplier != 0) {
-                    unsigned char *src = unsafe_mode
-                        ? memory + (*ptr + node->data.mul.src_offset)
-                        : memory + bf_masked_index(*ptr, node->data.mul.src_offset, mask);
-                    unsigned char *dst = unsafe_mode
-                        ? memory + (*ptr + node->data.mul.dst_offset)
-                        : memory + bf_masked_index(*ptr, node->data.mul.dst_offset, mask);
-                    *dst = (unsigned char)(*dst + ((*src) * node->data.mul.multiplier));
-                }
-                break;
-            }
-
-            case AST_DEBUG_LOG:
-                if (debug_mode) {
-                    fprintf(stderr, "DEBUG: Line %d, Column %d\n", node->line, node->column);
-                    fflush(stderr);
-                }
-                break;
-        }
-    }
-
-    return 0;
-}
-
-static int interpret_bf_ast(ast_node_t *ast, char *memory, size_t memory_size, bool unsafe_mode, bool debug_mode) {
-    long ptr = 0;
-    size_t mask = memory_size - 1;
-    return execute_ast_node(ast, (unsigned char *)memory, mask, unsafe_mode, debug_mode, &ptr);
-}
-#endif
-
-
 int main(int argc, char *argv[]) {
     bool debug_mode = false;
     bool optimize = true;
@@ -500,24 +399,16 @@ int main(int argc, char *argv[]) {
     bf_debug_info_t debug_info;
     bf_debug_info_t *debug_ptr = NULL;
     if (profile_mode) {
-#if BF_HAS_JIT
         debug_ptr = &debug_info;
         if (bf_debug_init(debug_ptr, NULL, 0) != 0) {
             bf_error("Failed to initialize debug info");
         }
-#else
-        fprintf(stderr, "Error: --profile is not supported on this architecture\n");
-        free(program);
-        if (ast) ast_free(ast);
-        return 1;
-#endif
     }
 
+    bf_func compiled_program;
     void *code_ptr = NULL;
     size_t code_size = 0;
     size_t effective_memory_size = memory_size - memory_offset;
-#if BF_HAS_JIT
-    bf_func compiled_program;
 
     // Adjust memory size for JIT compilation to account for offset
     compiled_program = compile_bf_ast(ast, debug_mode, unsafe_mode, &code_ptr, &code_size, debug_ptr, effective_memory_size);
@@ -540,13 +431,6 @@ int main(int argc, char *argv[]) {
         }
         bf_prof_start(&profiler);
     }
-#else
-    if (timing_mode) {
-        double phase_end = get_time_ms();
-        print_phase_time("AST Preparation", phase_start, phase_end);
-        phase_start = phase_end;
-    }
-#endif
 
     char *memory = allocate_guarded_memory(memory_size);
     if (!memory) {
@@ -559,13 +443,7 @@ int main(int argc, char *argv[]) {
         phase_start = phase_end;
     }
 
-#if BF_HAS_JIT
     compiled_program(memory + memory_offset);
-#else
-    if (interpret_bf_ast(ast, memory + memory_offset, effective_memory_size, unsafe_mode, debug_mode) != 0) {
-        bf_error("Interpreter execution failed");
-    }
-#endif
 
     if (timing_mode) {
         double phase_end = get_time_ms();
@@ -574,7 +452,6 @@ int main(int argc, char *argv[]) {
     }
 
     if (profile_mode) {
-#if BF_HAS_JIT
         bf_prof_stop(&profiler);
 
         FILE *prof_out = fopen(profile_output, "w");
@@ -594,7 +471,6 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Profile data written to: %s\n", profile_output);
 
         bf_prof_cleanup(&profiler);
-#endif
     }
 
     if (debug_ptr) {
